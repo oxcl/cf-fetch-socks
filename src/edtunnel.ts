@@ -21,10 +21,24 @@ export async function socks5Connect(
 	parsedSocks5Addr: ParsedSocks5Addr,
 	connect: ConnectFn,
 	secureTransport: 'off' | 'on' | 'starttls' = 'off',
+	signal?: AbortSignal,
 ): Promise<Socket | undefined> {
 	const { username, password, hostname, port } = parsedSocks5Addr;
 
 	const socket = connect({ hostname, port }, { secureTransport });
+
+	if (signal?.aborted) {
+		socket.close();
+		return;
+	}
+
+	const cleanup = () => {
+		try { socket.close(); } catch {}
+	};
+
+	if (signal) {
+		signal.addEventListener('abort', cleanup, { once: true });
+	}
 
 	const socksGreeting = new Uint8Array([5, 2, 0, 2]);
 
@@ -38,10 +52,14 @@ export async function socks5Connect(
 
 	if (res[0] !== 0x05) {
 		log(`socks server version error: ${res[0]} expected: 5`);
+		signal?.removeEventListener('abort', cleanup);
+		cleanup();
 		return;
 	}
 	if (res[1] === 0xff) {
 		log('no acceptable methods');
+		signal?.removeEventListener('abort', cleanup);
+		cleanup();
 		return;
 	}
 
@@ -49,6 +67,8 @@ export async function socks5Connect(
 		log('socks server needs auth');
 		if (!username || !password) {
 			log('please provide username/password');
+			signal?.removeEventListener('abort', cleanup);
+			cleanup();
 			return;
 		}
 		const authRequest = new Uint8Array([1, username.length, ...encoder.encode(username), password.length, ...encoder.encode(password)]);
@@ -56,6 +76,8 @@ export async function socks5Connect(
 		res = (await reader.read()).value;
 		if (res[0] !== 0x01 || res[1] !== 0x00) {
 			log('fail to auth socks server');
+			signal?.removeEventListener('abort', cleanup);
+			cleanup();
 			return;
 		}
 	}
@@ -73,6 +95,8 @@ export async function socks5Connect(
 			break;
 		default:
 			log(`invalid addressType is ${addressType}`);
+			signal?.removeEventListener('abort', cleanup);
+			cleanup();
 			return;
 	}
 	const socksRequest = new Uint8Array([5, 1, 0, ...DSTADDR, portRemote >> 8, portRemote & 0xff]);
@@ -84,16 +108,17 @@ export async function socks5Connect(
 		log('socks connection opened');
 	} else {
 		log('fail to open socks connection');
+		signal?.removeEventListener('abort', cleanup);
+		cleanup();
 		return;
 	}
+	signal?.removeEventListener('abort', cleanup);
 	writer.releaseLock();
 	reader.releaseLock();
 
 	if (secureTransport === 'starttls') {
 		log('upgrading to TLS...');
 		const secureSocket = socket.startTls();
-		writer.releaseLock();
-		reader.releaseLock();
 		return secureSocket;
 	}
 

@@ -37,10 +37,17 @@ export default {
 					password: env.SOCKS5_PROXY_PASSWORD,
 				},
 				socketConnect,
+				undefined,
+				request.signal,
 			);
 
 			if (!socket) {
 				return new Response(`SOCKS5 connection failed:\n${logs.join('\n')}`, { status: 500 });
+			}
+
+			if (request.signal.aborted) {
+				socket.close();
+				return new Response(`Request aborted\n${logs.join('\n')}`, { status: 499 });
 			}
 
 			log('SOCKS5 tunnel established, starting TLS...');
@@ -53,6 +60,12 @@ export default {
 			const handshakePromise = new Promise<void>((r) => (handshakeResolve = r));
 			let responseResolve: () => void;
 			const responsePromise = new Promise<void>((r) => (responseResolve = r));
+
+			const cleanup = () => {
+				try { socket.close(); } catch {}
+			};
+
+			request.signal.addEventListener('abort', cleanup, { once: true });
 
 			const tls = makeTLSClient({
 				host: targetHost,
@@ -122,6 +135,8 @@ export default {
 
 			log('Waiting for AI response...');
 			await responsePromise;
+
+			request.signal.removeEventListener('abort', cleanup);
 
 			const elapsed = Date.now() - startTime;
 
