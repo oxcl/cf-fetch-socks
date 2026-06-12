@@ -27,10 +27,10 @@ export default {
 				targetPort,
 				log,
 				{
-					hostname: '',
-					port: 1080,
-					username: '',
-					password: '',
+					hostname: env.SOCKS5_PROXY_HOSTNAME,
+					port: Number(env.SOCKS5_PROXY_PORT),
+					username: env.SOCKS5_PROXY_USERNAME,
+					password: env.SOCKS5_PROXY_PASSWORD,
 				},
 				connect as any,
 			);
@@ -44,10 +44,11 @@ export default {
 			const writer = socket.writable.getWriter();
 			const reader = socket.readable.getReader();
 
-			let allAppData = new Uint8Array(0);
-			let handshakeComplete = false;
+			const appDataChunks: Uint8Array[] = [];
 			let handshakeResolve: () => void;
 			const handshakePromise = new Promise<void>((r) => (handshakeResolve = r));
+			let responseResolve: () => void;
+			const responsePromise = new Promise<void>((r) => (responseResolve = r));
 
 			const tls = makeTLSClient({
 				host: targetHost,
@@ -61,15 +62,15 @@ export default {
 				},
 				onHandshake() {
 					log('TLS handshake completed!');
-					handshakeComplete = true;
-					handshakeResolve?.();
+					handshakeResolve();
 				},
 				onApplicationData(plaintext) {
 					log(`App data: ${plaintext.length} bytes`);
-					allAppData = new Uint8Array([...allAppData, ...plaintext]);
+					appDataChunks.push(plaintext);
 				},
 				onTlsEnd(error) {
 					log(`TLS ended: ${error || 'ok'}`);
+					responseResolve();
 				},
 			});
 
@@ -90,41 +91,51 @@ export default {
 			log('Starting TLS handshake...');
 			tls.startHandshake();
 
-			await new Promise((r) => setTimeout(r, 500));
 			await handshakePromise;
 
 			log('Sending HTTP request...');
-			const requestBody = {
+			const requestBody = JSON.stringify({
 				model: 'gpt-oss-120b',
 				messages: [{ role: 'user', content: "Say 'hello' in 1 word" }],
 				max_tokens: 5,
 				stream: false,
-			};
-			const body = JSON.stringify(requestBody);
+			});
 			const httpRequest = [
 				`POST /v1/chat/completions HTTP/1.1`,
 				`Host: ${targetHost}`,
 				`User-Agent: cf-fetch-socks/1.0`,
 				`Accept: application/json`,
 				`Content-Type: application/json`,
-				`Authorization: Bearer`,
-				`Content-Length: ${body.length}`,
+				`Authorization: Bearer ${env.CEREBRAS_API_KEY}`,
+				`Content-Length: ${requestBody.length}`,
 				`Connection: close`,
 				``,
 				``,
 			].join('\r\n');
 
 			await tls.write(new TextEncoder().encode(httpRequest));
-			await tls.write(new TextEncoder().encode(body));
+			await tls.write(new TextEncoder().encode(requestBody));
 
 			log('Waiting for AI response...');
-			await new Promise((r) => setTimeout(r, 600));
+			await responsePromise;
 
 			const elapsed = Date.now() - startTime;
-			log(`Total time: ${elapsed}ms, appData: ${allAppData.length} bytes`);
 
 			socket.close();
 			await readPromise;
+
+			let allAppDataLen = 0;
+			for (const chunk of appDataChunks) {
+				allAppDataLen += chunk.length;
+			}
+			const allAppData = new Uint8Array(allAppDataLen);
+			let offset = 0;
+			for (const chunk of appDataChunks) {
+				allAppData.set(chunk, offset);
+				offset += chunk.length;
+			}
+
+			log(`Total time: ${elapsed}ms, appData: ${allAppData.length} bytes`);
 
 			const response = new TextDecoder().decode(allAppData);
 			return new Response(`Logs:\n${logs.join('\n')}\n\nTime: ${elapsed}ms\n\nApp data:\n${response}`, {
