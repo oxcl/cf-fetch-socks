@@ -1,5 +1,14 @@
 import { connect } from 'cloudflare:sockets';
-import { socks5Connect, type ConnectFn } from './edtunnel';
+import { socks5Connect, type ConnectFn } from './tunnel';
+import {
+	TunnelError,
+	Socks5AuthError,
+	Socks5ProtocolError,
+	Socks5ServerError,
+	ConnectionRefusedError,
+	ConnectionTimeoutError,
+	AbortError,
+} from './errors';
 import type { Socket } from '@cloudflare/workers-types';
 import { makeTLSClient, setCryptoImplementation } from '@reclaimprotocol/tls';
 import { webcryptoCrypto } from '@reclaimprotocol/tls/webcrypto';
@@ -16,6 +25,7 @@ export default {
 
 		const startTime = Date.now();
 
+		let socket: Socket | undefined;
 		try {
 			const targetHost = 'api.cerebras.ai';
 			const targetPort = 443;
@@ -25,7 +35,7 @@ export default {
 			const socketConnect: ConnectFn = (opts, options) =>
 				connect({ hostname: opts.hostname, port: opts.port }, { secureTransport: options?.secureTransport, allowHalfOpen: false }) as Socket;
 
-			const socket = await socks5Connect(
+			socket = await socks5Connect(
 				2,
 				targetHost,
 				targetPort,
@@ -40,10 +50,6 @@ export default {
 				undefined,
 				request.signal,
 			);
-
-			if (!socket) {
-				return new Response(`SOCKS5 connection failed:\n${logs.join('\n')}`, { status: 500 });
-			}
 
 			if (request.signal.aborted) {
 				socket.close();
@@ -62,7 +68,7 @@ export default {
 			const responsePromise = new Promise<void>((r) => (responseResolve = r));
 
 			const cleanup = () => {
-				try { socket.close(); } catch {}
+				try { socket?.close(); } catch {}
 			};
 
 			request.signal.addEventListener('abort', cleanup, { once: true });
@@ -162,7 +168,39 @@ export default {
 				headers: { 'Content-Type': 'application/json' },
 			});
 		} catch (error) {
-			return new Response(`Exception:\n${error}\n\nLogs:\n${logs.join('\n')}`, { status: 500 });
+			if (socket) {
+				try { socket.close(); } catch {}
+			}
+
+			if (error instanceof AbortError) {
+				return new Response(`Aborted:\n${error.stack}\n\nLogs:\n${logs.join('\n')}`, { status: 499 });
+			}
+
+			if (error instanceof Socks5AuthError) {
+				return new Response(`Proxy Auth Required:\n${error.stack}\n\nLogs:\n${logs.join('\n')}`, {
+					status: 407,
+					headers: { 'Content-Type': 'text/plain' },
+				});
+			}
+
+			if (
+				error instanceof TunnelError ||
+				error instanceof Socks5ProtocolError ||
+				error instanceof Socks5ServerError ||
+				error instanceof ConnectionRefusedError ||
+				error instanceof ConnectionTimeoutError
+			) {
+				const status = error instanceof ConnectionTimeoutError ? 504 : 502;
+				return new Response(`${error.name}: ${error.message}\n${error.stack}\n\nLogs:\n${logs.join('\n')}`, {
+					status,
+					headers: { 'Content-Type': 'text/plain' },
+				});
+			}
+
+			return new Response(`Exception:\n${error instanceof Error ? error.stack : error}\n\nLogs:\n${logs.join('\n')}`, {
+				status: 500,
+				headers: { 'Content-Type': 'text/plain' },
+			});
 		}
 	},
 } satisfies ExportedHandler<Env>;

@@ -1,4 +1,14 @@
 import type { Socket } from '@cloudflare/workers-types';
+import {
+	TunnelError,
+	Socks5ProtocolError,
+	Socks5AuthError,
+	Socks5ServerError,
+	ConnectionRefusedError,
+	ConnectionTimeoutError,
+	TlsUpgradeError,
+	AbortError,
+} from './errors';
 
 export interface ParsedSocks5Addr {
 	username?: string;
@@ -22,14 +32,26 @@ export async function socks5Connect(
 	connect: ConnectFn,
 	secureTransport: 'off' | 'on' | 'starttls' = 'off',
 	signal?: AbortSignal,
-): Promise<Socket | undefined> {
+): Promise<Socket> {
 	const { username, password, hostname, port } = parsedSocks5Addr;
 
-	const socket = connect({ hostname, port }, { secureTransport });
+	let socket: Socket;
+
+	try {
+		socket = connect({ hostname, port }, { secureTransport });
+	} catch (err) {
+		if (err instanceof Error && (err.message.includes('connection refused') || err.message.includes('ECONNREFUSED'))) {
+			throw new ConnectionRefusedError(`Connection to proxy ${hostname}:${port} refused`, err);
+		}
+		if (err instanceof Error && (err.message.includes('timeout') || err.message.includes('ETIMEDOUT'))) {
+			throw new ConnectionTimeoutError(`Connection to proxy ${hostname}:${port} timed out`, err);
+		}
+		throw new ConnectionRefusedError(`Failed to connect to proxy ${hostname}:${port}`, err);
+	}
 
 	if (signal?.aborted) {
-		socket.close();
-		return;
+		try { socket.close(); } catch {}
+		throw new AbortError('Request was aborted before connection established', signal.reason);
 	}
 
 	const cleanup = () => {
@@ -48,37 +70,52 @@ export async function socks5Connect(
 
 	const reader = socket.readable.getReader();
 	const encoder = new TextEncoder();
-	let res = (await reader.read()).value;
+
+	let res: Uint8Array;
+	try {
+		const readResult = await reader.read();
+		if (readResult.done) {
+			throw new Socks5ProtocolError('SOCKS5 server closed connection during greeting');
+		}
+		res = readResult.value;
+	} catch (err) {
+		signal?.removeEventListener('abort', cleanup);
+		cleanup();
+		if (err instanceof TunnelError) throw err;
+		throw new ConnectionRefusedError(`Proxy ${hostname}:${port} closed connection unexpectedly`, err);
+	}
 
 	if (res[0] !== 0x05) {
-		log(`socks server version error: ${res[0]} expected: 5`);
 		signal?.removeEventListener('abort', cleanup);
 		cleanup();
-		return;
+		throw new Socks5ProtocolError(`SOCKS server version error: ${res[0]} expected: 5`);
 	}
 	if (res[1] === 0xff) {
-		log('no acceptable methods');
 		signal?.removeEventListener('abort', cleanup);
 		cleanup();
-		return;
+		throw new Socks5ProtocolError('No acceptable SOCKS authentication methods');
 	}
 
 	if (res[1] === 0x02) {
 		log('socks server needs auth');
 		if (!username || !password) {
-			log('please provide username/password');
 			signal?.removeEventListener('abort', cleanup);
 			cleanup();
-			return;
+			throw new Socks5AuthError('SOCKS5 server requires authentication but no credentials provided');
 		}
 		const authRequest = new Uint8Array([1, username.length, ...encoder.encode(username), password.length, ...encoder.encode(password)]);
 		await writer.write(authRequest);
-		res = (await reader.read()).value;
-		if (res[0] !== 0x01 || res[1] !== 0x00) {
-			log('fail to auth socks server');
+		const authResult = await reader.read();
+		if (authResult.done) {
 			signal?.removeEventListener('abort', cleanup);
 			cleanup();
-			return;
+			throw new Socks5ProtocolError('SOCKS5 server closed connection during authentication');
+		}
+		res = authResult.value;
+		if (res[0] !== 0x01 || res[1] !== 0x00) {
+			signal?.removeEventListener('abort', cleanup);
+			cleanup();
+			throw new Socks5AuthError('SOCKS5 authentication failed');
 		}
 	}
 
@@ -94,32 +131,42 @@ export async function socks5Connect(
 			DSTADDR = new Uint8Array([4, ...addressRemote.split(':').flatMap((x) => [parseInt(x.slice(0, 2), 16), parseInt(x.slice(2), 16)])]);
 			break;
 		default:
-			log(`invalid addressType is ${addressType}`);
 			signal?.removeEventListener('abort', cleanup);
 			cleanup();
-			return;
+			throw new TunnelError(`Invalid addressType: ${addressType}`, 'INVALID_ADDRESS_TYPE');
 	}
 	const socksRequest = new Uint8Array([5, 1, 0, ...DSTADDR, portRemote >> 8, portRemote & 0xff]);
 	await writer.write(socksRequest);
 	log('sent socks request');
 
-	res = (await reader.read()).value;
-	if (res[1] === 0x00) {
-		log('socks connection opened');
-	} else {
-		log('fail to open socks connection');
+	const replyResult = await reader.read();
+	if (replyResult.done) {
 		signal?.removeEventListener('abort', cleanup);
 		cleanup();
-		return;
+		throw new Socks5ProtocolError('SOCKS5 server closed connection during request');
 	}
+	res = replyResult.value;
+
+	if (res[1] !== 0x00) {
+		signal?.removeEventListener('abort', cleanup);
+		cleanup();
+		throw new Socks5ServerError(`SOCKS5 server returned error code: ${res[1]}`);
+	}
+
+	log('socks connection opened');
+
 	signal?.removeEventListener('abort', cleanup);
 	writer.releaseLock();
 	reader.releaseLock();
 
 	if (secureTransport === 'starttls') {
 		log('upgrading to TLS...');
-		const secureSocket = socket.startTls();
-		return secureSocket;
+		try {
+			const secureSocket = socket.startTls();
+			return secureSocket;
+		} catch (err) {
+			throw new TlsUpgradeError('TLS upgrade failed', err);
+		}
 	}
 
 	return socket;
