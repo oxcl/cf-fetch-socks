@@ -8,6 +8,7 @@ import {
 	ConnectionRefusedError,
 	ConnectionTimeoutError,
 	AbortError,
+	TlsSessionError,
 } from './errors';
 import type { Socket } from '@cloudflare/workers-types';
 import { makeTLSClient, setCryptoImplementation } from '@reclaimprotocol/tls';
@@ -63,9 +64,26 @@ export default {
 
 			const appDataChunks: Uint8Array[] = [];
 			let handshakeResolve: () => void;
-			const handshakePromise = new Promise<void>((r) => (handshakeResolve = r));
+			let handshakeReject: (err: Error) => void;
+			const handshakePromise = new Promise<void>((r, rej) => {
+				handshakeResolve = r;
+				handshakeReject = rej;
+			});
 			let responseResolve: () => void;
-			const responsePromise = new Promise<void>((r) => (responseResolve = r));
+			let responseReject: (err: Error) => void;
+			const responsePromise = new Promise<void>((r, rej) => {
+				responseResolve = r;
+				responseReject = rej;
+			});
+
+			const abortPromise = new Promise<never>((_, rej) => {
+				const handler = () => rej(new AbortError('Request aborted', request.signal.reason));
+				if (request.signal.aborted) {
+					handler();
+				} else {
+					request.signal.addEventListener('abort', handler, { once: true });
+				}
+			});
 
 			const cleanup = () => {
 				try { socket?.close(); } catch {}
@@ -93,7 +111,11 @@ export default {
 				},
 				onTlsEnd(error) {
 					log(`TLS ended: ${error || 'ok'}`);
-					responseResolve();
+					if (error) {
+						responseReject(new TlsSessionError(`TLS session ended with error: ${error}`));
+					} else {
+						responseResolve();
+					}
 				},
 			});
 
@@ -114,7 +136,7 @@ export default {
 			log('Starting TLS handshake...');
 			tls.startHandshake();
 
-			await handshakePromise;
+			await Promise.race([handshakePromise, abortPromise]);
 
 			log('Sending HTTP request...');
 			const requestBody = JSON.stringify({
@@ -123,6 +145,8 @@ export default {
 				max_tokens: 5,
 				stream: false,
 			});
+			const requestBodyEncoder = new TextEncoder();
+			const requestBodyEncoded = requestBodyEncoder.encode(requestBody);
 			const httpRequest = [
 				`POST /v1/chat/completions HTTP/1.1`,
 				`Host: ${targetHost}`,
@@ -130,17 +154,17 @@ export default {
 				`Accept: application/json`,
 				`Content-Type: application/json`,
 				`Authorization: Bearer ${env.CEREBRAS_API_KEY}`,
-				`Content-Length: ${requestBody.length}`,
+				`Content-Length: ${requestBodyEncoded.byteLength}`,
 				`Connection: close`,
 				``,
 				``,
 			].join('\r\n');
 
 			await tls.write(new TextEncoder().encode(httpRequest));
-			await tls.write(new TextEncoder().encode(requestBody));
+			await tls.write(requestBodyEncoded);
 
 			log('Waiting for AI response...');
-			await responsePromise;
+			await Promise.race([responsePromise, abortPromise]);
 
 			request.signal.removeEventListener('abort', cleanup);
 
@@ -188,7 +212,8 @@ export default {
 				error instanceof Socks5ProtocolError ||
 				error instanceof Socks5ServerError ||
 				error instanceof ConnectionRefusedError ||
-				error instanceof ConnectionTimeoutError
+				error instanceof ConnectionTimeoutError ||
+				error instanceof TlsSessionError
 			) {
 				const status = error instanceof ConnectionTimeoutError ? 504 : 502;
 				return new Response(`${error.name}: ${error.message}\n${error.stack}\n\nLogs:\n${logs.join('\n')}`, {

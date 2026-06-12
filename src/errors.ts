@@ -57,3 +57,10 @@ export class AbortError extends TunnelError {
 		this.name = 'AbortError';
 	}
 }
+
+export class TlsSessionError extends TunnelError {
+	constructor(message: string, cause?: unknown) {
+		super(message, 'TLS_SESSION_ERROR', cause);
+		this.name = 'TlsSessionError';
+	}
+}
