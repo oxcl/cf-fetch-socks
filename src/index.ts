@@ -1,5 +1,6 @@
 import { connect } from 'cloudflare:sockets';
-import { socks5Connect } from './edtunnel';
+import { socks5Connect, type ConnectFn } from './edtunnel';
+import type { Socket } from '@cloudflare/workers-types';
 import { makeTLSClient, setCryptoImplementation } from '@reclaimprotocol/tls';
 import { webcryptoCrypto } from '@reclaimprotocol/tls/webcrypto';
 
@@ -21,6 +22,9 @@ export default {
 
 			log(`Connecting to SOCKS5 proxy...`);
 
+			const socketConnect: ConnectFn = (opts, options) =>
+				connect({ hostname: opts.hostname, port: opts.port }, { secureTransport: options?.secureTransport, allowHalfOpen: false }) as Socket;
+
 			const socket = await socks5Connect(
 				2,
 				targetHost,
@@ -32,7 +36,7 @@ export default {
 					username: env.SOCKS5_PROXY_USERNAME,
 					password: env.SOCKS5_PROXY_PASSWORD,
 				},
-				connect as any,
+				socketConnect,
 			);
 
 			if (!socket) {

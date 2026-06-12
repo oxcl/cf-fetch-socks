@@ -7,7 +7,10 @@ export interface ParsedSocks5Addr {
 	port: number;
 }
 
-export type ConnectFn = (opts: { hostname: string; port: number }, options?: { secureTransport?: string; allowHalfOpen?: boolean }) => Socket;
+export type ConnectFn = (
+	opts: { hostname: string; port: number },
+	options?: { secureTransport?: string },
+) => Socket;
 export type LogFn = (msg: string) => void;
 
 export async function socks5Connect(
