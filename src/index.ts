@@ -1,5 +1,3 @@
-import { connect } from 'cloudflare:sockets';
-import { socks5Connect, type ConnectFn } from './tunnel';
 import {
 	TunnelError,
 	Socks5AuthError,
@@ -10,11 +8,7 @@ import {
 	AbortError,
 	TlsSessionError,
 } from './errors';
-import type { Socket } from '@cloudflare/workers-types';
-import { makeTLSClient, setCryptoImplementation } from '@reclaimprotocol/tls';
-import { webcryptoCrypto } from '@reclaimprotocol/tls/webcrypto';
-
-setCryptoImplementation(webcryptoCrypto);
+import { Socks5Proxy } from './socks5-proxy';
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -26,132 +20,43 @@ export default {
 
 		const startTime = Date.now();
 
-		let socket: Socket | undefined;
+		const proxy = new Socks5Proxy(
+			{
+				hostname: env.SOCKS5_PROXY_HOSTNAME,
+				port: Number(env.SOCKS5_PROXY_PORT),
+				username: env.SOCKS5_PROXY_USERNAME,
+				password: env.SOCKS5_PROXY_PASSWORD,
+				maxIdlePerTarget: 0,
+			},
+			log,
+		);
+
+		let conn;
 		try {
 			const targetHost = 'api.cerebras.ai';
 			const targetPort = 443;
 
-			log(`Connecting to SOCKS5 proxy...`);
+			log('Acquiring connection through SOCKS5 proxy...');
 
-			const socketConnect: ConnectFn = (opts, options) =>
-				connect(
-					{ hostname: opts.hostname, port: opts.port },
-					{ secureTransport: options?.secureTransport, allowHalfOpen: false },
-				) as Socket;
-
-			socket = await socks5Connect(
-				2,
-				targetHost,
-				targetPort,
-				log,
-				{
-					hostname: env.SOCKS5_PROXY_HOSTNAME,
-					port: Number(env.SOCKS5_PROXY_PORT),
-					username: env.SOCKS5_PROXY_USERNAME,
-					password: env.SOCKS5_PROXY_PASSWORD,
-				},
-				socketConnect,
-				undefined,
+			conn = await proxy.acquire(
+				{ host: targetHost, port: targetPort, tls: true },
 				request.signal,
 			);
 
 			if (request.signal.aborted) {
-				socket.close();
+				conn.close();
 				return new Response(`Request aborted\n${logs.join('\n')}`, { status: 499 });
 			}
 
-			log('SOCKS5 tunnel established, starting TLS...');
+			log('Connection acquired, sending HTTP request...');
 
-			const writer = socket.writable.getWriter();
-			const reader = socket.readable.getReader();
-
-			const appDataChunks: Uint8Array[] = [];
-			let handshakeResolve: () => void;
-			let handshakeReject: (err: Error) => void;
-			const handshakePromise = new Promise<void>((r, rej) => {
-				handshakeResolve = r;
-				handshakeReject = rej;
-			});
-			let responseResolve: () => void;
-			let responseReject: (err: Error) => void;
-			const responsePromise = new Promise<void>((r, rej) => {
-				responseResolve = r;
-				responseReject = rej;
-			});
-
-			const abortPromise = new Promise<never>((_, rej) => {
-				const handler = () => rej(new AbortError('Request aborted', request.signal.reason));
-				if (request.signal.aborted) {
-					handler();
-				} else {
-					request.signal.addEventListener('abort', handler, { once: true });
-				}
-			});
-
-			const cleanup = () => {
-				try {
-					socket?.close();
-				} catch {}
-			};
-
-			request.signal.addEventListener('abort', cleanup, { once: true });
-
-			const tls = makeTLSClient({
-				host: targetHost,
-				verifyServerCertificate: true,
-				cipherSuites: ['TLS_AES_256_GCM_SHA384'],
-				async write({ header, content }) {
-					const data = new Uint8Array(header.length + content.length);
-					data.set(header, 0);
-					data.set(content, header.length);
-					await writer.write(data);
-				},
-				onHandshake() {
-					log('TLS handshake completed!');
-					handshakeResolve();
-				},
-				onApplicationData(plaintext) {
-					log(`App data: ${plaintext.length} bytes`);
-					appDataChunks.push(plaintext);
-				},
-				onTlsEnd(error) {
-					log(`TLS ended: ${error || 'ok'}`);
-					if (error) {
-						responseReject(new TlsSessionError(`TLS session ended with error: ${error}`));
-					} else {
-						responseResolve();
-					}
-				},
-			});
-
-			async function pumpRead() {
-				try {
-					while (true) {
-						const { value, done } = await reader.read();
-						if (done) break;
-						tls.handleReceivedBytes(value);
-					}
-				} catch (e) {
-					log(`Read pump error: ${e}`);
-				}
-			}
-
-			const readPromise = pumpRead();
-
-			log('Starting TLS handshake...');
-			tls.startHandshake();
-
-			await Promise.race([handshakePromise, abortPromise]);
-
-			log('Sending HTTP request...');
 			const requestBody = JSON.stringify({
 				model: 'gpt-oss-120b',
 				messages: [{ role: 'user', content: "Say 'hello' in 1 word" }],
 				max_tokens: 5,
 				stream: false,
 			});
-			const requestBodyEncoder = new TextEncoder();
-			const requestBodyEncoded = requestBodyEncoder.encode(requestBody);
+			const requestBodyEncoded = new TextEncoder().encode(requestBody);
 			const httpRequest = [
 				`POST /v1/chat/completions HTTP/1.1`,
 				`Host: ${targetHost}`,
@@ -165,18 +70,25 @@ export default {
 				``,
 			].join('\r\n');
 
-			await tls.write(new TextEncoder().encode(httpRequest));
-			await tls.write(requestBodyEncoded);
+			await conn.write(new TextEncoder().encode(httpRequest));
+			await conn.write(requestBodyEncoded);
 
-			log('Waiting for AI response...');
-			await Promise.race([responsePromise, abortPromise]);
+			log('Waiting for response...');
 
-			request.signal.removeEventListener('abort', cleanup);
+			const reader = conn.readable.getReader();
+			const appDataChunks: Uint8Array[] = [];
+
+			try {
+				while (true) {
+					const { value, done } = await reader.read();
+					if (done) break;
+					appDataChunks.push(value);
+				}
+			} catch (e) {
+				log(`Read error: ${e}`);
+			}
 
 			const elapsed = Date.now() - startTime;
-
-			socket.close();
-			await readPromise;
 
 			let allAppDataLen = 0;
 			for (const chunk of appDataChunks) {
@@ -197,10 +109,8 @@ export default {
 				headers: { 'Content-Type': 'application/json' },
 			});
 		} catch (error) {
-			if (socket) {
-				try {
-					socket.close();
-				} catch {}
+			if (conn) {
+				conn.close();
 			}
 
 			if (error instanceof AbortError) {
@@ -233,6 +143,8 @@ export default {
 				status: 500,
 				headers: { 'Content-Type': 'text/plain' },
 			});
+		} finally {
+			proxy.close();
 		}
 	},
 } satisfies ExportedHandler<Env>;

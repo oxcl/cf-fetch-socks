@@ -35,7 +35,7 @@ function parseIPv6Address(address: string): Uint8Array {
 	}
 
 	let expanded: string[];
-	if (emptyCount === 1) {
+	if (emptyCount >= 1) {
 		const emptyIndex = parts.indexOf('');
 		const before = parts.slice(0, emptyIndex);
 		const after = parts.slice(emptyIndex + 1);
@@ -58,7 +58,7 @@ async function readSocksReplyFrame(
 	reader: ReadableStreamDefaultReader<Uint8Array>,
 	atyp: number,
 	initialChunk: Uint8Array,
-): Promise<void> {
+): Promise<{ leftover: Uint8Array }> {
 	let remainingLen: number;
 	switch (atyp) {
 		case 1:
@@ -78,13 +78,24 @@ async function readSocksReplyFrame(
 
 	const alreadyRead = initialChunk.length - 4;
 	let totalRead = alreadyRead;
+	const chunks: Uint8Array[] = [];
 	while (totalRead < remainingLen) {
 		const { value, done } = await reader.read();
 		if (done) {
 			throw new Socks5ProtocolError('SOCKS5 server closed connection while reading reply frame');
 		}
+		chunks.push(value);
 		totalRead += value.length;
 	}
+
+	const overRead = totalRead - remainingLen;
+	if (overRead === 0) {
+		return { leftover: new Uint8Array(0) };
+	}
+
+	const lastChunk = chunks[chunks.length - 1];
+	const leftoverStart = lastChunk.length - overRead;
+	return { leftover: lastChunk.slice(leftoverStart) };
 }
 
 export async function socks5Connect(
@@ -96,7 +107,7 @@ export async function socks5Connect(
 	connect: ConnectFn,
 	secureTransport: 'off' | 'on' | 'starttls' = 'off',
 	signal?: AbortSignal,
-): Promise<Socket> {
+): Promise<{ socket: Socket; leftover: Uint8Array }> {
 	const { username, password, hostname, port } = parsedSocks5Addr;
 
 	let socket: Socket;
@@ -218,41 +229,32 @@ export async function socks5Connect(
 		}
 
 		const atyp = res[3];
-		await readSocksReplyFrame(reader, atyp, res);
+		const { leftover } = await readSocksReplyFrame(reader, atyp, res);
 
 		log('socks connection opened');
 
 		socketOwned = true;
+
+		if (secureTransport === 'starttls') {
+			log('upgrading to TLS...');
+			try {
+				const secureSocket = socket.startTls();
+				return { socket: secureSocket, leftover: new Uint8Array(0) };
+			} catch (err) {
+				throw new TlsUpgradeError('TLS upgrade failed', err);
+			}
+		}
+
+		return { socket, leftover };
 	} finally {
 		if (signal) {
 			signal.removeEventListener('abort', cleanup);
 		}
-		if (!socketOwned) {
-			if (writer) {
-				try { writer.releaseLock(); } catch {}
-			}
-			if (reader) {
-				try { reader.releaseLock(); } catch {}
-			}
+		if (writer) {
+			try { writer.releaseLock(); } catch {}
+		}
+		if (reader) {
+			try { reader.releaseLock(); } catch {}
 		}
 	}
-
-	if (writer) {
-		try { writer.releaseLock(); } catch {}
-	}
-	if (reader) {
-		try { reader.releaseLock(); } catch {}
-	}
-
-	if (secureTransport === 'starttls') {
-		log('upgrading to TLS...');
-		try {
-			const secureSocket = socket.startTls();
-			return secureSocket;
-		} catch (err) {
-			throw new TlsUpgradeError('TLS upgrade failed', err);
-		}
-	}
-
-	return socket;
 }
