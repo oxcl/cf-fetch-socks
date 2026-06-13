@@ -34,7 +34,10 @@ export default {
 			log(`Connecting to SOCKS5 proxy...`);
 
 			const socketConnect: ConnectFn = (opts, options) =>
-				connect({ hostname: opts.hostname, port: opts.port }, { secureTransport: options?.secureTransport, allowHalfOpen: false }) as Socket;
+				connect(
+					{ hostname: opts.hostname, port: opts.port },
+					{ secureTransport: options?.secureTransport, allowHalfOpen: false },
+				) as Socket;
 
 			socket = await socks5Connect(
 				2,
@@ -86,14 +89,16 @@ export default {
 			});
 
 			const cleanup = () => {
-				try { socket?.close(); } catch {}
+				try {
+					socket?.close();
+				} catch {}
 			};
 
 			request.signal.addEventListener('abort', cleanup, { once: true });
 
 			const tls = makeTLSClient({
 				host: targetHost,
-				verifyServerCertificate: false,
+				verifyServerCertificate: true,
 				cipherSuites: ['TLS_AES_256_GCM_SHA384'],
 				async write({ header, content }) {
 					const data = new Uint8Array(header.length + content.length);
@@ -193,7 +198,9 @@ export default {
 			});
 		} catch (error) {
 			if (socket) {
-				try { socket.close(); } catch {}
+				try {
+					socket.close();
+				} catch {}
 			}
 
 			if (error instanceof AbortError) {

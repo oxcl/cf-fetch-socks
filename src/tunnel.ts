@@ -213,7 +213,7 @@ export async function socks5Connect(
 		}
 
 		const atyp = res[3];
-		await readSocksReplyFrame(socket.readable.getReader(), atyp);
+		await readSocksReplyFrame(reader, atyp);
 
 		log('socks connection opened');
 
