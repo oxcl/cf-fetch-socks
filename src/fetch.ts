@@ -40,7 +40,7 @@ export class GatewayTimeoutError extends ProxyError {
 }
 
 export interface ProxyFetchOptions extends RequestInit {
-	proxy: string;
+	proxy: string | Proxy;
 	maxRedirects?: number;
 }
 
@@ -242,14 +242,27 @@ export async function fetch(
 	options?: ProxyFetchOptions,
 ): Promise<Response> {
 	const maxRedirects = options?.maxRedirects ?? 20;
-	const proxy = parseProxyUri(options?.proxy ?? '');
 
-	const socksProxy = new Proxy(socks5Tunnel, {
-		hostname: proxy.hostname,
-		port: proxy.port,
-		username: proxy.username,
-		password: proxy.password,
-	});
+	let socksProxy: Proxy;
+	let owned = false;
+
+	if (options?.proxy instanceof Proxy) {
+		socksProxy = options.proxy;
+	} else {
+		const proxyUri = typeof options?.proxy === 'string' ? options.proxy : '';
+		const parsed = parseProxyUri(proxyUri);
+		socksProxy = new Proxy(socks5Tunnel, {
+			hostname: parsed.hostname,
+			port: parsed.port,
+			username: parsed.username,
+			password: parsed.password,
+		});
+		owned = true;
+	}
+
+	const closeIfOwned = () => {
+		if (owned) socksProxy.close();
+	};
 
 	let currentUrl = new URL(url);
 	let method = (options?.method ?? 'GET').toUpperCase();
@@ -272,7 +285,7 @@ export async function fetch(
 				const contentEncoding = respHeaders.get('Content-Encoding');
 				const cleanup = () => {
 					conn.close();
-					socksProxy.close();
+					closeIfOwned();
 				};
 
 				if (contentEncoding === 'gzip') {
@@ -305,7 +318,7 @@ export async function fetch(
 
 			const location = respHeaders.get('Location');
 			if (!location) {
-				socksProxy.close();
+				closeIfOwned();
 				return new Response(initialBytes, { status, statusText, headers: respHeaders });
 			}
 
@@ -317,10 +330,10 @@ export async function fetch(
 			}
 		}
 
-		socksProxy.close();
+		closeIfOwned();
 		return new Response('Too many redirects', { status: 499 });
 	} catch (error) {
-		socksProxy.close();
+		closeIfOwned();
 		throw error;
 	}
 }

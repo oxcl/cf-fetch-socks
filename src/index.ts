@@ -1,13 +1,21 @@
 import { fetch as proxyFetch } from './fetch';
+import { Proxy } from './proxy';
+import { socks5Tunnel } from './socks5';
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const url = new URL(request.url);
-		const proxyUri = `socks5://${env.SOCKS5_PROXY_USERNAME}:${env.SOCKS5_PROXY_PASSWORD}@${env.SOCKS5_PROXY_HOSTNAME}:${env.SOCKS5_PROXY_PORT}`;
+
+		const proxy = new Proxy(socks5Tunnel, {
+			hostname: env.SOCKS5_PROXY_HOSTNAME,
+			port: Number(env.SOCKS5_PROXY_PORT),
+			username: env.SOCKS5_PROXY_USERNAME,
+			password: env.SOCKS5_PROXY_PASSWORD,
+		});
 
 		try {
 			if (url.pathname === '/test-fetch') {
-				const res = await proxyFetch('https://httpbin.io/ip', { proxy: proxyUri });
+				const res = await proxyFetch('https://httpbin.io/ip', { proxy });
 				const body = await res.text();
 				return new Response(body, {
 					status: res.status,
@@ -16,7 +24,7 @@ export default {
 			}
 
 			if (url.pathname === '/redirect') {
-				const res = await proxyFetch('https://httpbin.org/redirect/2', { proxy: proxyUri });
+				const res = await proxyFetch('https://httpbin.org/redirect/2', { proxy });
 				const body = await res.text();
 				return new Response(body, {
 					status: res.status,
@@ -26,7 +34,7 @@ export default {
 
 			const isStream = url.pathname === '/stream';
 			const res = await proxyFetch('https://api.cerebras.ai/v1/chat/completions', {
-				proxy: proxyUri,
+				proxy,
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -54,6 +62,8 @@ export default {
 			});
 		} catch (error) {
 			return new Response(`Error: ${error instanceof Error ? error.message : error}`, { status: 500 });
+		} finally {
+			proxy.close();
 		}
 	},
 } satisfies ExportedHandler<Env>;
