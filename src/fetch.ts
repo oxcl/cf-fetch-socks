@@ -1,3 +1,4 @@
+import zlib from 'node:zlib';
 import { Proxy } from './proxy';
 import { socks5Tunnel } from './socks5';
 
@@ -60,6 +61,7 @@ function buildRequest(target: URL, method: string, headers?: HeadersInit, body?:
 		`Host: ${target.host}`,
 		`User-Agent: undici`,
 		`Accept: */*`,
+		`Accept-Encoding: gzip`,
 		`Connection: close`,
 	];
 
@@ -168,6 +170,46 @@ async function drainReader(reader: ReadableStreamDefaultReader<Uint8Array>): Pro
 	}
 }
 
+function createGunzipStream(
+	source: ReadableStream<Uint8Array>,
+	initialBytes: Uint8Array,
+	cleanup?: () => void,
+): ReadableStream<Uint8Array> {
+	const gunzip = zlib.createGunzip();
+	const reader = source.getReader();
+
+	return new ReadableStream({
+		async start(controller) {
+			gunzip.on('data', (chunk: Buffer) => {
+				controller.enqueue(new Uint8Array(chunk));
+			});
+			gunzip.on('end', () => {
+				controller.close();
+				cleanup?.();
+			});
+			gunzip.on('error', (err) => {
+				controller.error(err);
+				cleanup?.();
+			});
+
+			if (initialBytes.length > 0) {
+				gunzip.write(initialBytes);
+			}
+
+			while (true) {
+				const { value, done } = await reader.read();
+				if (done) break;
+				gunzip.write(value);
+			}
+			gunzip.end();
+		},
+		cancel() {
+			gunzip.destroy();
+			cleanup?.();
+		},
+	});
+}
+
 async function openConnection(target: URL, socksProxy: Proxy) {
 	const isTls = target.protocol === 'https:';
 	const targetPort = target.port ? Number(target.port) : (isTls ? 443 : 80);
@@ -227,6 +269,19 @@ export async function fetch(
 			checkProxyError(status, initialText);
 
 			if (!REDIRECT_STATUSES.has(status)) {
+				const contentEncoding = respHeaders.get('Content-Encoding');
+				const cleanup = () => {
+					conn.close();
+					socksProxy.close();
+				};
+
+				if (contentEncoding === 'gzip') {
+					const bodyStream = createGunzipStream(conn.readable, initialBytes, cleanup);
+					respHeaders.delete('Content-Encoding');
+					respHeaders.delete('Content-Length');
+					return new Response(bodyStream, { status, statusText, headers: respHeaders });
+				}
+
 				const { readable, writable } = new TransformStream();
 				const writer = writable.getWriter();
 				(async () => {
@@ -239,8 +294,7 @@ export async function fetch(
 						}
 					} finally {
 						await writer.close();
-						conn.close();
-						socksProxy.close();
+						cleanup();
 					}
 				})();
 				return new Response(readable, { status, statusText, headers: respHeaders });
