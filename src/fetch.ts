@@ -15,18 +15,52 @@ function parseProxyUri(proxy: string) {
 	};
 }
 
-function buildGetRequest(target: URL): Uint8Array {
+function buildRequest(target: URL, method: string, headers?: HeadersInit, body?: BodyInit | null): Uint8Array {
 	const path = target.pathname + target.search;
 	const lines = [
-		`GET ${path} HTTP/1.1`,
+		`${method} ${path} HTTP/1.1`,
 		`Host: ${target.host}`,
 		`User-Agent: undici`,
 		`Accept: */*`,
 		`Connection: close`,
-		``,
-		``,
 	];
-	return new TextEncoder().encode(lines.join('\r\n'));
+
+	const extraHeaders = new Headers(headers);
+	let bodyBytes: Uint8Array | undefined;
+	if (body != null) {
+		if (body instanceof Uint8Array) {
+			bodyBytes = body;
+		} else if (body instanceof ArrayBuffer) {
+			bodyBytes = new Uint8Array(body);
+		} else if (ArrayBuffer.isView(body)) {
+			bodyBytes = new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+		} else if (typeof body === 'string') {
+			bodyBytes = new TextEncoder().encode(body);
+		} else {
+			bodyBytes = new TextEncoder().encode(String(body));
+		}
+		if (!extraHeaders.has('Content-Length')) {
+			extraHeaders.set('Content-Length', String(bodyBytes.length));
+		}
+		if (!extraHeaders.has('Content-Type')) {
+			extraHeaders.set('Content-Type', 'application/x-www-form-urlencoded');
+		}
+	}
+
+	for (const [key, value] of extraHeaders) {
+		lines.push(`${key}: ${value}`);
+	}
+
+	lines.push(``, ``);
+	const headerBytes = new TextEncoder().encode(lines.join('\r\n'));
+
+	if (bodyBytes && bodyBytes.length > 0) {
+		const result = new Uint8Array(headerBytes.length + bodyBytes.length);
+		result.set(headerBytes);
+		result.set(bodyBytes, headerBytes.length);
+		return result;
+	}
+	return headerBytes;
 }
 
 function parseHttpResponse(data: Uint8Array): { status: number; statusText: string; headers: Headers; body: Uint8Array } {
@@ -58,6 +92,7 @@ export async function fetch(
 	options?: ProxyFetchOptions,
 ): Promise<Response> {
 	const target = new URL(url);
+	const method = (options?.method ?? 'GET').toUpperCase();
 	const proxy = parseProxyUri(options?.proxy ?? '');
 
 	const socksProxy = new Proxy(socks5Tunnel, {
@@ -76,7 +111,7 @@ export async function fetch(
 			{ host: target.hostname, port: targetPort, tls: isTls },
 		);
 
-		const requestBytes = buildGetRequest(target);
+		const requestBytes = buildRequest(target, method, options?.headers, options?.body);
 		await conn.write(requestBytes);
 
 		const reader = conn.readable.getReader();
