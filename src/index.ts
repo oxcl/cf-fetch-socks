@@ -15,6 +15,15 @@ export default {
 				});
 			}
 
+			if (url.pathname === '/redirect') {
+				const res = await proxyFetch('https://httpbin.org/redirect/2', { proxy: proxyUri });
+				const body = await res.text();
+				return new Response(body, {
+					status: res.status,
+					headers: { 'Content-Type': 'application/json' },
+				});
+			}
+
 			const isStream = url.pathname === '/stream';
 			const res = await proxyFetch('https://api.cerebras.ai/v1/chat/completions', {
 				proxy: proxyUri,

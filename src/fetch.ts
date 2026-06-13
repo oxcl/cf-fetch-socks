@@ -1,8 +1,11 @@
 import { Proxy } from './proxy';
 import { socks5Tunnel } from './socks5';
 
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
 export interface ProxyFetchOptions extends RequestInit {
 	proxy: string;
+	maxRedirects?: number;
 }
 
 function parseProxyUri(proxy: string) {
@@ -63,7 +66,7 @@ function buildRequest(target: URL, method: string, headers?: HeadersInit, body?:
 	return headerBytes;
 }
 
-function parseHttpHeaders(data: Uint8Array): { status: number; statusText: string; headers: Headers } {
+function parseHttpHeaders(data: Uint8Array): { status: number; statusText: string; headers: Headers; bodyStart: number } {
 	const text = new TextDecoder().decode(data);
 	const headerEnd = text.indexOf('\r\n\r\n');
 	const headersPart = text.substring(0, headerEnd);
@@ -82,15 +85,65 @@ function parseHttpHeaders(data: Uint8Array): { status: number; statusText: strin
 		headers.set(key, value);
 	}
 
-	return { status, statusText, headers };
+	return { status, statusText, headers, bodyStart: headerEnd + 4 };
+}
+
+async function readHeaders(
+	reader: ReadableStreamDefaultReader<Uint8Array>,
+): Promise<{ status: number; statusText: string; headers: Headers; initialBytes: Uint8Array }> {
+	const chunks: Uint8Array[] = [];
+	let headerEndOffset = -1;
+
+	while (true) {
+		const { value, done } = await reader.read();
+		if (done) break;
+		chunks.push(value);
+
+		let accumulated = '';
+		for (const chunk of chunks) {
+			accumulated += new TextDecoder().decode(chunk, { stream: true });
+		}
+		const idx = accumulated.indexOf('\r\n\r\n');
+		if (idx !== -1) {
+			headerEndOffset = new TextEncoder().encode(accumulated.substring(0, idx)).length;
+			break;
+		}
+	}
+
+	let totalLen = 0;
+	for (const chunk of chunks) {
+		totalLen += chunk.length;
+	}
+	const allData = new Uint8Array(totalLen);
+	let offset = 0;
+	for (const chunk of chunks) {
+		allData.set(chunk, offset);
+		offset += chunk.length;
+	}
+
+	const { status, statusText, headers, bodyStart } = parseHttpHeaders(allData);
+	const initialBytes = allData.slice(bodyStart);
+	return { status, statusText, headers, initialBytes };
+}
+
+async function drainReader(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+	while (true) {
+		const { done } = await reader.read();
+		if (done) break;
+	}
+}
+
+async function openConnection(target: URL, socksProxy: Proxy) {
+	const isTls = target.protocol === 'https:';
+	const targetPort = target.port ? Number(target.port) : (isTls ? 443 : 80);
+	return socksProxy.acquire({ host: target.hostname, port: targetPort, tls: isTls });
 }
 
 export async function fetch(
 	url: string | URL,
 	options?: ProxyFetchOptions,
 ): Promise<Response> {
-	const target = new URL(url);
-	const method = (options?.method ?? 'GET').toUpperCase();
+	const maxRedirects = options?.maxRedirects ?? 20;
 	const proxy = parseProxyUri(options?.proxy ?? '');
 
 	const socksProxy = new Proxy(socks5Tunnel, {
@@ -100,77 +153,60 @@ export async function fetch(
 		password: proxy.password,
 	});
 
-	const isTls = target.protocol === 'https:';
-	const targetPort = target.port ? Number(target.port) : (isTls ? 443 : 80);
+	let currentUrl = new URL(url);
+	let method = (options?.method ?? 'GET').toUpperCase();
+	let headers = options?.headers;
+	let body = options?.body;
 
-	let conn;
 	try {
-		conn = await socksProxy.acquire(
-			{ host: target.hostname, port: targetPort, tls: isTls },
-		);
+		for (let i = 0; i <= maxRedirects; i++) {
+			const conn = await openConnection(currentUrl, socksProxy);
+			const requestBytes = buildRequest(currentUrl, method, headers, body);
+			await conn.write(requestBytes);
 
-		const requestBytes = buildRequest(target, method, options?.headers, options?.body);
-		await conn.write(requestBytes);
+			const reader = conn.readable.getReader();
+			const { status, statusText, headers: respHeaders, initialBytes } = await readHeaders(reader);
 
-		const reader = conn.readable.getReader();
-		const chunks: Uint8Array[] = [];
-		let headerEndOffset = -1;
-
-		while (true) {
-			const { value, done } = await reader.read();
-			if (done) break;
-			chunks.push(value);
-
-			let accumulated = '';
-			for (const chunk of chunks) {
-				accumulated += new TextDecoder().decode(chunk, { stream: true });
+			if (!REDIRECT_STATUSES.has(status)) {
+				const { readable, writable } = new TransformStream();
+				const writer = writable.getWriter();
+				(async () => {
+					try {
+						if (initialBytes.length > 0) await writer.write(initialBytes);
+						while (true) {
+							const { value, done } = await reader.read();
+							if (done) break;
+							await writer.write(value);
+						}
+					} finally {
+						await writer.close();
+						conn.close();
+						socksProxy.close();
+					}
+				})();
+				return new Response(readable, { status, statusText, headers: respHeaders });
 			}
-			const idx = accumulated.indexOf('\r\n\r\n');
-			if (idx !== -1) {
-				headerEndOffset = new TextEncoder().encode(accumulated.substring(0, idx)).length;
-				break;
-			}
-		}
 
-		let totalLen = 0;
-		for (const chunk of chunks) {
-			totalLen += chunk.length;
-		}
-		const allData = new Uint8Array(totalLen);
-		let offset = 0;
-		for (const chunk of chunks) {
-			allData.set(chunk, offset);
-			offset += chunk.length;
-		}
-
-		const { status, statusText, headers } = parseHttpHeaders(allData);
-		const bodyStart = headerEndOffset + 4;
-		const initialBody = allData.slice(bodyStart);
-
-		const { readable, writable } = new TransformStream();
-		const writer = writable.getWriter();
-		(async () => {
-			try {
-				if (initialBody.length > 0) {
-					await writer.write(initialBody);
-				}
-				while (true) {
-					const { value, done } = await reader.read();
-					if (done) break;
-					await writer.write(value);
-				}
-			} finally {
-				await writer.close();
-				conn.close();
-				socksProxy.close();
-			}
-		})();
-
-		return new Response(readable, { status, statusText, headers });
-	} catch (error) {
-		if (conn) {
+			await drainReader(reader);
 			conn.close();
+
+			const location = respHeaders.get('Location');
+			if (!location) {
+				socksProxy.close();
+				return new Response(initialBytes, { status, statusText, headers: respHeaders });
+			}
+
+			currentUrl = new URL(location, currentUrl);
+
+			if (status === 301 || status === 302 || status === 303) {
+				method = 'GET';
+				body = undefined;
+			}
 		}
+
+		socksProxy.close();
+		return new Response('Too many redirects', { status: 499 });
+	} catch (error) {
 		socksProxy.close();
 		throw error;
 	}
