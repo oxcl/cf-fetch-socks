@@ -63,12 +63,10 @@ function buildRequest(target: URL, method: string, headers?: HeadersInit, body?:
 	return headerBytes;
 }
 
-function parseHttpResponse(data: Uint8Array): { status: number; statusText: string; headers: Headers; body: Uint8Array } {
+function parseHttpHeaders(data: Uint8Array): { status: number; statusText: string; headers: Headers } {
 	const text = new TextDecoder().decode(data);
 	const headerEnd = text.indexOf('\r\n\r\n');
 	const headersPart = text.substring(0, headerEnd);
-	const bodyStart = headerEnd + 4;
-	const body = data.slice(bodyStart);
 
 	const lines = headersPart.split('\r\n');
 	const [httpVersion, statusCode, ...statusTextParts] = lines[0].split(' ');
@@ -84,7 +82,7 @@ function parseHttpResponse(data: Uint8Array): { status: number; statusText: stri
 		headers.set(key, value);
 	}
 
-	return { status, statusText, headers, body };
+	return { status, statusText, headers };
 }
 
 export async function fetch(
@@ -116,11 +114,22 @@ export async function fetch(
 
 		const reader = conn.readable.getReader();
 		const chunks: Uint8Array[] = [];
+		let headerEndOffset = -1;
 
 		while (true) {
 			const { value, done } = await reader.read();
 			if (done) break;
 			chunks.push(value);
+
+			let accumulated = '';
+			for (const chunk of chunks) {
+				accumulated += new TextDecoder().decode(chunk, { stream: true });
+			}
+			const idx = accumulated.indexOf('\r\n\r\n');
+			if (idx !== -1) {
+				headerEndOffset = new TextEncoder().encode(accumulated.substring(0, idx)).length;
+				break;
+			}
 		}
 
 		let totalLen = 0;
@@ -134,12 +143,35 @@ export async function fetch(
 			offset += chunk.length;
 		}
 
-		const { status, statusText, headers, body } = parseHttpResponse(allData);
-		return new Response(body, { status, statusText, headers });
-	} finally {
+		const { status, statusText, headers } = parseHttpHeaders(allData);
+		const bodyStart = headerEndOffset + 4;
+		const initialBody = allData.slice(bodyStart);
+
+		const { readable, writable } = new TransformStream();
+		const writer = writable.getWriter();
+		(async () => {
+			try {
+				if (initialBody.length > 0) {
+					await writer.write(initialBody);
+				}
+				while (true) {
+					const { value, done } = await reader.read();
+					if (done) break;
+					await writer.write(value);
+				}
+			} finally {
+				await writer.close();
+				conn.close();
+				socksProxy.close();
+			}
+		})();
+
+		return new Response(readable, { status, statusText, headers });
+	} catch (error) {
 		if (conn) {
 			conn.close();
 		}
 		socksProxy.close();
+		throw error;
 	}
 }

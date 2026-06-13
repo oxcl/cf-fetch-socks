@@ -15,6 +15,7 @@ export default {
 				});
 			}
 
+			const isStream = url.pathname === '/stream';
 			const res = await proxyFetch('https://api.cerebras.ai/v1/chat/completions', {
 				proxy: proxyUri,
 				method: 'POST',
@@ -26,9 +27,17 @@ export default {
 					model: 'gpt-oss-120b',
 					messages: [{ role: 'user', content: "Say 'hello' in 1 word" }],
 					max_tokens: 5,
-					stream: false,
+					stream: isStream,
 				}),
 			});
+
+			if (isStream) {
+				return new Response(res.body, {
+					status: res.status,
+					headers: { 'Content-Type': 'text/event-stream' },
+				});
+			}
+
 			const body = await res.text();
 			return new Response(body, {
 				status: res.status,
