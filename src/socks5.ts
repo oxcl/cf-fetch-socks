@@ -1,32 +1,19 @@
 import type { Socket } from '@cloudflare/workers-types';
+import type { ConnectFn, LogFn } from './socket';
+import type { ProxyTarget, ProxyCredentials, TunnelFn } from './connection';
 import {
-	TunnelError,
 	Socks5ProtocolError,
 	Socks5AuthError,
 	Socks5ServerError,
 	ConnectionRefusedError,
 	ConnectionTimeoutError,
-	TlsUpgradeError,
 	AbortError,
 } from './errors';
-
-export interface ParsedSocks5Addr {
-	username?: string;
-	password?: string;
-	hostname: string;
-	port: number;
-}
-
-export type ConnectFn = (
-	opts: { hostname: string; port: number },
-	options?: { secureTransport?: string },
-) => Socket;
-export type LogFn = (msg: string) => void;
 
 function parseIPv6Address(address: string): Uint8Array {
 	const parts = address.split(':');
 	if (parts.length < 2 || parts.length > 8) {
-		throw new TunnelError(`Invalid IPv6 address: ${address}`, 'INVALID_IPV6');
+		throw new Error(`Invalid IPv6 address: ${address}`);
 	}
 
 	let emptyCount = 0;
@@ -98,22 +85,21 @@ async function readSocksReplyFrame(
 	return { leftover: lastChunk.slice(leftoverStart) };
 }
 
-export async function socks5Connect(
-	addressType: 1 | 2 | 3,
-	addressRemote: string,
-	portRemote: number,
-	log: LogFn,
-	parsedSocks5Addr: ParsedSocks5Addr,
-	connect: ConnectFn,
-	secureTransport: 'off' | 'on' | 'starttls' = 'off',
-	signal?: AbortSignal,
-): Promise<{ socket: Socket; leftover: Uint8Array }> {
-	const { username, password, hostname, port } = parsedSocks5Addr;
+function getAddressType(host: string): 1 | 2 | 3 {
+	if (host.includes(':')) return 3;
+	const parts = host.split('.');
+	if (parts.length === 4 && parts.every((p) => /^\d{1,3}$/.test(p))) return 1;
+	return 2;
+}
+
+export const socks5Tunnel: TunnelFn = async (target, creds, connectFn, log, signal) => {
+	const { username, password, hostname, port } = creds;
+	const addressType = getAddressType(target.host);
 
 	let socket: Socket;
 
 	try {
-		socket = connect({ hostname, port }, { secureTransport });
+		socket = connectFn({ hostname, port });
 	} catch (err) {
 		if (err instanceof Error && (err.message.includes('connection refused') || err.message.includes('ECONNREFUSED'))) {
 			throw new ConnectionRefusedError(`Connection to proxy ${hostname}:${port} refused`, err);
@@ -162,7 +148,7 @@ export async function socks5Connect(
 			}
 			res = readResult.value;
 		} catch (err) {
-			if (err instanceof TunnelError) throw err;
+			if (err instanceof Socks5ProtocolError || err instanceof ConnectionRefusedError) throw err;
 			throw new ConnectionRefusedError(`Proxy ${hostname}:${port} closed connection unexpectedly`, err);
 		}
 
@@ -199,22 +185,22 @@ export async function socks5Connect(
 		let DSTADDR: Uint8Array;
 		switch (addressType) {
 			case 1: {
-				DSTADDR = new Uint8Array([1, ...addressRemote.split('.').map(Number)]);
+				DSTADDR = new Uint8Array([1, ...target.host.split('.').map(Number)]);
 				break;
 			}
 			case 2: {
-				DSTADDR = new Uint8Array([3, addressRemote.length, ...encoder.encode(addressRemote)]);
+				DSTADDR = new Uint8Array([3, target.host.length, ...encoder.encode(target.host)]);
 				break;
 			}
 			case 3: {
-				DSTADDR = parseIPv6Address(addressRemote);
+				DSTADDR = parseIPv6Address(target.host);
 				break;
 			}
 			default: {
-				throw new TunnelError(`Invalid addressType: ${addressType}`, 'INVALID_ADDRESS_TYPE');
+				throw new Socks5ProtocolError(`Invalid addressType: ${addressType}`);
 			}
 		}
-		const socksRequest = new Uint8Array([5, 1, 0, ...DSTADDR, portRemote >> 8, portRemote & 0xff]);
+		const socksRequest = new Uint8Array([5, 1, 0, ...DSTADDR, target.port >> 8, target.port & 0xff]);
 		await writer.write(socksRequest);
 		log('sent socks request');
 
@@ -235,16 +221,6 @@ export async function socks5Connect(
 
 		socketOwned = true;
 
-		if (secureTransport === 'starttls') {
-			log('upgrading to TLS...');
-			try {
-				const secureSocket = socket.startTls();
-				return { socket: secureSocket, leftover: new Uint8Array(0) };
-			} catch (err) {
-				throw new TlsUpgradeError('TLS upgrade failed', err);
-			}
-		}
-
 		return { socket, leftover };
 	} finally {
 		if (signal) {
@@ -257,4 +233,4 @@ export async function socks5Connect(
 			try { reader.releaseLock(); } catch {}
 		}
 	}
-}
+};

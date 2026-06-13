@@ -1,42 +1,42 @@
-import { connect } from 'cloudflare:sockets';
 import type { Socket } from '@cloudflare/workers-types';
-import { openProxyConnection, type ProxyConnection, type ProxyTarget, type Socks5Credentials } from './proxy-connection';
-import type { ConnectFn, LogFn } from './tunnel';
+import type { ConnectFn, LogFn } from './socket';
+import { defaultConnect } from './socket';
+import { openConnection, type ProxyConnection, type ProxyTarget, type ProxyCredentials, type TunnelFn } from './connection';
 
-export interface Socks5ProxyOptions extends Socks5Credentials {
+export interface ProxyOptions extends ProxyCredentials {
 	maxIdlePerTarget?: number;
 	idleTimeoutMs?: number;
 }
 
-const defaultConnect: ConnectFn = (opts, options) =>
-	connect(
-		{ hostname: opts.hostname, port: opts.port },
-		{ secureTransport: options?.secureTransport, allowHalfOpen: false },
-	) as Socket;
-
-export class Socks5Proxy {
+export class Proxy {
 	private pool = new Map<string, ProxyConnection[]>();
-	private opts: Socks5ProxyOptions;
+	private tunnelFn: TunnelFn;
+	private opts: ProxyCredentials;
+	private connectFn: ConnectFn;
 	private log: LogFn;
+	private maxIdle: number;
 
-	constructor(opts: Socks5ProxyOptions, log: LogFn = console.log) {
-		this.opts = { ...opts };
+	constructor(tunnelFn: TunnelFn, opts: ProxyOptions, log: LogFn = console.log) {
+		this.tunnelFn = tunnelFn;
+		this.opts = {
+			hostname: opts.hostname,
+			port: opts.port,
+			username: opts.username,
+			password: opts.password,
+		};
+		this.connectFn = defaultConnect;
 		this.log = log;
+		this.maxIdle = opts.maxIdlePerTarget ?? 0;
 	}
 
-	async connect(signal?: AbortSignal): Promise<void> {
+	async probe(signal?: AbortSignal): Promise<void> {
 		this.log('Probing proxy reachability...');
-		const { socket } = await import('./tunnel').then((m) =>
-			m.socks5Connect(
-				2,
-				'0.0.0.0',
-				0,
-				this.log,
-				this.opts,
-				defaultConnect,
-				'off',
-				signal,
-			),
+		const { socket } = await this.tunnelFn(
+			{ host: '0.0.0.0', port: 0, tls: false },
+			this.opts,
+			this.connectFn,
+			this.log,
+			signal,
 		);
 		socket.close();
 		this.log('Proxy is reachable');
@@ -58,20 +58,19 @@ export class Socks5Proxy {
 		}
 
 		this.log(`Opening new connection to ${target.host}:${target.port}`);
-		return openProxyConnection(this.opts, target, defaultConnect, this.log, signal);
+		return openConnection(this.tunnelFn, this.opts, target, this.connectFn, this.log, signal);
 	}
 
 	release(conn: ProxyConnection, reusable: boolean): void {
-		const max = this.opts.maxIdlePerTarget ?? 0;
 		const key = this.poolKey(conn.target);
 
-		if (!reusable || conn.closed || max <= 0) {
+		if (!reusable || conn.closed || this.maxIdle <= 0) {
 			conn.close();
 			return;
 		}
 
 		const idle = this.pool.get(key) ?? [];
-		if (idle.length >= max) {
+		if (idle.length >= this.maxIdle) {
 			conn.close();
 			return;
 		}

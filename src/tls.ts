@@ -1,85 +1,13 @@
 import type { Socket } from '@cloudflare/workers-types';
 import { makeTLSClient, setCryptoImplementation } from '@reclaimprotocol/tls';
 import { webcryptoCrypto } from '@reclaimprotocol/tls/webcrypto';
-import { socks5Connect, type ConnectFn, type LogFn } from './tunnel';
+import type { LogFn } from './socket';
+import type { ProxyTarget, ProxyConnection } from './connection';
 import { TlsSessionError } from './errors';
 
 setCryptoImplementation(webcryptoCrypto);
 
-export interface Socks5Credentials {
-	hostname: string;
-	port: number;
-	username?: string;
-	password?: string;
-}
-
-export interface ProxyTarget {
-	host: string;
-	port: number;
-	tls: boolean;
-}
-
-export interface ProxyConnection {
-	readonly target: ProxyTarget;
-	readonly closed: boolean;
-	write(data: Uint8Array): Promise<void>;
-	readable: ReadableStream<Uint8Array>;
-	close(): void;
-}
-
-export async function openProxyConnection(
-	creds: Socks5Credentials,
-	target: ProxyTarget,
-	connectFn: ConnectFn,
-	log: LogFn,
-	signal?: AbortSignal,
-): Promise<ProxyConnection> {
-	const { socket, leftover } = await socks5Connect(
-		target.tls ? 2 : target.host.includes(':') ? 3 : 1,
-		target.host,
-		target.port,
-		log,
-		creds,
-		connectFn,
-		'off',
-		signal,
-	);
-
-	if (!target.tls) {
-		return wrapRaw(socket, target);
-	}
-
-	return wrapTls(socket, leftover, target, log, signal);
-}
-
-function wrapRaw(socket: Socket, target: ProxyTarget): ProxyConnection {
-	let closed = false;
-	const writer = socket.writable.getWriter();
-
-	return {
-		target,
-		get closed() {
-			return closed;
-		},
-		async write(data: Uint8Array) {
-			if (closed) throw new Error('Connection closed');
-			await writer.write(data);
-		},
-		readable: socket.readable as ReadableStream<Uint8Array>,
-		close() {
-			if (closed) return;
-			closed = true;
-			try {
-				writer.releaseLock();
-			} catch {}
-			try {
-				socket.close();
-			} catch {}
-		},
-	};
-}
-
-async function wrapTls(
+export async function wrapTls(
 	socket: Socket,
 	leftover: Uint8Array,
 	target: ProxyTarget,
@@ -100,13 +28,13 @@ async function wrapTls(
 			host: target.host,
 			verifyServerCertificate: true,
 			cipherSuites: [
-			'TLS_AES_256_GCM_SHA384',
-			'TLS_AES_128_GCM_SHA256',
-			'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384',
-			'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
-			'TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384',
-			'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256',
-		],
+				'TLS_AES_256_GCM_SHA384',
+				'TLS_AES_128_GCM_SHA256',
+				'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384',
+				'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
+				'TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384',
+				'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256',
+			],
 			async write({ header, content }) {
 				const data = new Uint8Array(header.length + content.length);
 				data.set(header, 0);
@@ -132,7 +60,6 @@ async function wrapTls(
 					tlsError = new TlsSessionError(`TLS session ended with error: ${error}`);
 					reject(tlsError);
 				}
-				// Wake up any pending pull() so it can close the stream
 				if (resolveAppData) {
 					resolveAppData();
 					resolveAppData = null;

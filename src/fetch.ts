@@ -1,4 +1,5 @@
-import { Socks5Proxy } from './socks5-proxy';
+import { Proxy } from './proxy';
+import { socks5Tunnel } from './socks5';
 
 export interface ProxyFetchOptions extends RequestInit {
 	proxy: string;
@@ -59,7 +60,7 @@ export async function fetch(
 	const target = new URL(url);
 	const proxy = parseProxyUri(options?.proxy ?? '');
 
-	const socksProxy = new Socks5Proxy({
+	const socksProxy = new Proxy(socks5Tunnel, {
 		hostname: proxy.hostname,
 		port: proxy.port,
 		username: proxy.username,

@@ -8,7 +8,8 @@ import {
 	AbortError,
 	TlsSessionError,
 } from './errors';
-import { Socks5Proxy } from './socks5-proxy';
+import { Proxy } from './proxy';
+import { socks5Tunnel } from './socks5';
 import { fetch as proxyFetch } from './fetch';
 
 export default {
@@ -36,7 +37,8 @@ export default {
 
 		const startTime = Date.now();
 
-		const proxy = new Socks5Proxy(
+		const proxy = new Proxy(
+			socks5Tunnel,
 			{
 				hostname: env.SOCKS5_PROXY_HOSTNAME,
 				port: Number(env.SOCKS5_PROXY_PORT),
