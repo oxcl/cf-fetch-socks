@@ -9,9 +9,25 @@ import {
 	TlsSessionError,
 } from './errors';
 import { Socks5Proxy } from './socks5-proxy';
+import { fetch as proxyFetch } from './fetch';
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		const url = new URL(request.url);
+
+		if (url.pathname === '/test-fetch') {
+			const proxyUri = `socks5://${env.SOCKS5_PROXY_USERNAME}:${env.SOCKS5_PROXY_PASSWORD}@${env.SOCKS5_PROXY_HOSTNAME}:${env.SOCKS5_PROXY_PORT}`;
+			try {
+				const res = await proxyFetch('https://httpbin.io/ip', { proxy: proxyUri });
+				const body = await res.text();
+				return new Response(body, {
+					status: res.status,
+					headers: { 'Content-Type': 'application/json' },
+				});
+			} catch (error) {
+				return new Response(`Error: ${error instanceof Error ? error.message : error}`, { status: 500 });
+			}
+		}
 		const logs: string[] = [];
 		const log = (msg: string) => {
 			console.log(`[SOCKS5] ${msg}`);

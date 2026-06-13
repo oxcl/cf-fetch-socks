@@ -99,7 +99,14 @@ async function wrapTls(
 		const tls = makeTLSClient({
 			host: target.host,
 			verifyServerCertificate: true,
-			cipherSuites: ['TLS_AES_256_GCM_SHA384'],
+			cipherSuites: [
+			'TLS_AES_256_GCM_SHA384',
+			'TLS_AES_128_GCM_SHA256',
+			'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384',
+			'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
+			'TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384',
+			'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256',
+		],
 			async write({ header, content }) {
 				const data = new Uint8Array(header.length + content.length);
 				data.set(header, 0);
