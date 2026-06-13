@@ -54,25 +54,30 @@ function parseIPv6Address(address: string): Uint8Array {
 	return new Uint8Array([4, ...bytes]);
 }
 
-async function readSocksReplyFrame(reader: ReadableStreamDefaultReader<Uint8Array>, atyp: number): Promise<void> {
-	let addrLen: number;
+async function readSocksReplyFrame(
+	reader: ReadableStreamDefaultReader<Uint8Array>,
+	atyp: number,
+	initialChunk: Uint8Array,
+): Promise<void> {
+	let remainingLen: number;
 	switch (atyp) {
 		case 1:
-			addrLen = 4;
+			remainingLen = 4 + 2;
 			break;
-		case 3:
-			addrLen = 1;
+		case 3: {
+			const domainLen = initialChunk[4];
+			remainingLen = 1 + domainLen + 2;
 			break;
+		}
 		case 4:
-			addrLen = 16;
+			remainingLen = 16 + 2;
 			break;
 		default:
 			throw new Socks5ProtocolError(`SOCKS5 reply: unknown ATYP ${atyp}`);
 	}
 
-	const remainingLen = 2 + addrLen + 2;
-
-	let totalRead = 0;
+	const alreadyRead = initialChunk.length - 4;
+	let totalRead = alreadyRead;
 	while (totalRead < remainingLen) {
 		const { value, done } = await reader.read();
 		if (done) {
@@ -213,7 +218,7 @@ export async function socks5Connect(
 		}
 
 		const atyp = res[3];
-		await readSocksReplyFrame(reader, atyp);
+		await readSocksReplyFrame(reader, atyp, res);
 
 		log('socks connection opened');
 
@@ -230,6 +235,13 @@ export async function socks5Connect(
 				try { reader.releaseLock(); } catch {}
 			}
 		}
+	}
+
+	if (writer) {
+		try { writer.releaseLock(); } catch {}
+	}
+	if (reader) {
+		try { reader.releaseLock(); } catch {}
 	}
 
 	if (secureTransport === 'starttls') {
