@@ -3,6 +3,41 @@ import { socks5Tunnel } from './socks5';
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
+export class ProxyError extends Error {
+	constructor(message: string, public readonly status: number) {
+		super(message);
+		this.name = 'ProxyError';
+	}
+}
+
+export class ProxyAuthError extends ProxyError {
+	constructor(message = 'Proxy authentication required') {
+		super(message, 407);
+		this.name = 'ProxyAuthError';
+	}
+}
+
+export class ProxyForbiddenError extends ProxyError {
+	constructor(message = 'Forbidden by proxy') {
+		super(message, 403);
+		this.name = 'ProxyForbiddenError';
+	}
+}
+
+export class BadGatewayError extends ProxyError {
+	constructor(message = 'Bad gateway') {
+		super(message, 502);
+		this.name = 'BadGatewayError';
+	}
+}
+
+export class GatewayTimeoutError extends ProxyError {
+	constructor(message = 'Gateway timeout') {
+		super(message, 504);
+		this.name = 'GatewayTimeoutError';
+	}
+}
+
 export interface ProxyFetchOptions extends RequestInit {
 	proxy: string;
 	maxRedirects?: number;
@@ -139,6 +174,27 @@ async function openConnection(target: URL, socksProxy: Proxy) {
 	return socksProxy.acquire({ host: target.hostname, port: targetPort, tls: isTls });
 }
 
+function checkProxyError(status: number, bodyText: string): void {
+	switch (status) {
+		case 407:
+			throw new ProxyAuthError();
+		case 403:
+			throw new ProxyForbiddenError();
+		case 502:
+			throw new BadGatewayError();
+		case 504:
+			throw new GatewayTimeoutError();
+	}
+
+	const lowerBody = bodyText.toLowerCase();
+	if (lowerBody.includes('proxy') && (lowerBody.includes('denied') || lowerBody.includes('blocked') || lowerBody.includes('refused'))) {
+		throw new ProxyError(`Proxy error: ${bodyText.slice(0, 200)}`, status);
+	}
+	if (lowerBody.includes('connection refused')) {
+		throw new ProxyError('Connection refused by target', status);
+	}
+}
+
 export async function fetch(
 	url: string | URL,
 	options?: ProxyFetchOptions,
@@ -166,6 +222,9 @@ export async function fetch(
 
 			const reader = conn.readable.getReader();
 			const { status, statusText, headers: respHeaders, initialBytes } = await readHeaders(reader);
+
+			const initialText = new TextDecoder().decode(initialBytes);
+			checkProxyError(status, initialText);
 
 			if (!REDIRECT_STATUSES.has(status)) {
 				const { readable, writable } = new TransformStream();
