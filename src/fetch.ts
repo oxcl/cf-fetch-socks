@@ -61,7 +61,6 @@ function buildRequest(target: URL, method: string, headers?: HeadersInit, body?:
 		`Host: ${target.host}`,
 		`User-Agent: undici`,
 		`Accept: */*`,
-		`Accept-Encoding: gzip`,
 		`Connection: close`,
 	];
 
