@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { env } from 'cloudflare:test';
 import { Proxy, socks5Tunnel } from '../../src';
-import { AbortError, Socks5AuthError, Socks5ProtocolError, Socks5ServerError, TunnelError } from '../../src/errors';
+import { AbortError, Socks5AuthError, Socks5ProtocolError, TunnelError } from '../../src/errors';
 
 function makeProxy() {
 	return new Proxy(socks5Tunnel, {
@@ -19,13 +19,6 @@ describe('abort', () => {
 		controller.abort();
 
 		await expect(proxy.acquire({ host: 'httpbin.org', port: 443, tls: true }, controller.signal)).rejects.toThrow(AbortError);
-	});
-});
-
-describe('probe', () => {
-	it('attempts to probe the proxy (may be rejected if proxy rejects 0.0.0.0:0)', async () => {
-		const proxy = makeProxy();
-		await expect(proxy.probe()).rejects.toThrow(Socks5ServerError);
 	});
 });
 

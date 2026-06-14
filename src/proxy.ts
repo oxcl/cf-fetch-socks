@@ -35,13 +35,6 @@ export class Proxy {
 		this.log = log;
 	}
 
-	async probe(signal?: AbortSignal): Promise<void> {
-		this.log('Probing proxy reachability...');
-		const { socket } = await this.tunnelFn({ host: '0.0.0.0', port: 0, tls: false }, this.opts, this.connectFn, this.log, signal);
-		socket.close();
-		this.log('Proxy is reachable');
-	}
-
 	async acquire(target: ProxyTarget, signal?: AbortSignal, debug?: DebugContext): Promise<ProxyConnection> {
 		this.log(`Opening new connection to ${target.host}:${target.port}`);
 		debug?.log(`Opening new connection to ${target.host}:${target.port}`);
