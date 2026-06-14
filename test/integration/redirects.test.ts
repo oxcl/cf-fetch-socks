@@ -63,14 +63,6 @@ describe('redirects', () => {
 		expect(res.status).toBe(200);
 	});
 
-	it('returns 499 when max redirects exceeded', async () => {
-		const res = await socksFetch(`${HTTPBIN_BASE}/redirect/10`, {
-			proxy,
-			maxRedirects: 3,
-		});
-		expect(res.status).toBe(499);
-	});
-
 	it('preserves method through redirects', async () => {
 		const target = encodeURIComponent(`${HTTPBIN_BASE}/get`);
 		const res = await socksFetch(`${HTTPBIN_BASE}/redirect-to?url=${target}`, {

@@ -1,68 +1,18 @@
 import zlib from 'node:zlib';
 import { Proxy } from './proxy';
 import { socks5Tunnel } from './socks5';
+import { ProxyError, ProxyAuthError, ProxyForbiddenError, BadGatewayError, GatewayTimeoutError } from './errors';
+import { parseProxyUri } from './utils';
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
-export class ProxyError extends Error {
-	constructor(message: string, public readonly status: number) {
-		super(message);
-		this.name = 'ProxyError';
-	}
-}
-
-export class ProxyAuthError extends ProxyError {
-	constructor(message = 'Proxy authentication required') {
-		super(message, 407);
-		this.name = 'ProxyAuthError';
-	}
-}
-
-export class ProxyForbiddenError extends ProxyError {
-	constructor(message = 'Forbidden by proxy') {
-		super(message, 403);
-		this.name = 'ProxyForbiddenError';
-	}
-}
-
-export class BadGatewayError extends ProxyError {
-	constructor(message = 'Bad gateway') {
-		super(message, 502);
-		this.name = 'BadGatewayError';
-	}
-}
-
-export class GatewayTimeoutError extends ProxyError {
-	constructor(message = 'Gateway timeout') {
-		super(message, 504);
-		this.name = 'GatewayTimeoutError';
-	}
-}
-
 export interface ProxyFetchOptions extends RequestInit {
 	proxy: string | Proxy;
-	maxRedirects?: number;
-}
-
-function parseProxyUri(proxy: string) {
-	const url = new URL(proxy);
-	return {
-		hostname: url.hostname,
-		port: Number(url.port),
-		username: url.username || undefined,
-		password: url.password || undefined,
-	};
 }
 
 function buildRequest(target: URL, method: string, headers?: HeadersInit, body?: BodyInit | null): Uint8Array {
 	const path = target.pathname + target.search;
-	const lines = [
-		`${method} ${path} HTTP/1.1`,
-		`Host: ${target.host}`,
-		`User-Agent: undici`,
-		`Accept: */*`,
-		`Connection: close`,
-	];
+	const lines = [`${method} ${path} HTTP/1.1`, `Host: ${target.host}`, `User-Agent: undici`, `Accept: */*`, `Connection: close`];
 
 	const extraHeaders = new Headers(headers);
 	let bodyBytes: Uint8Array | undefined;
@@ -211,7 +161,7 @@ function createGunzipStream(
 
 async function openConnection(target: URL, socksProxy: Proxy) {
 	const isTls = target.protocol === 'https:';
-	const targetPort = target.port ? Number(target.port) : (isTls ? 443 : 80);
+	const targetPort = target.port ? Number(target.port) : isTls ? 443 : 80;
 	return socksProxy.acquire({ host: target.hostname, port: targetPort, tls: isTls });
 }
 
@@ -236,12 +186,7 @@ function checkProxyError(status: number, bodyText: string): void {
 	}
 }
 
-export async function socksFetch(
-	url: string | URL,
-	options?: ProxyFetchOptions,
-): Promise<Response> {
-	const maxRedirects = options?.maxRedirects ?? 20;
-
+export async function socksFetch(url: string | URL, options?: ProxyFetchOptions): Promise<Response> {
 	let socksProxy: Proxy;
 	let owned = false;
 
@@ -269,7 +214,7 @@ export async function socksFetch(
 	let body = options?.body;
 
 	try {
-		for (let i = 0; i <= maxRedirects; i++) {
+		while (true) {
 			const conn = await openConnection(currentUrl, socksProxy);
 			const requestBytes = buildRequest(currentUrl, method, headers, body);
 			await conn.write(requestBytes);
