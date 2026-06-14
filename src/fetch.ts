@@ -16,7 +16,7 @@ export interface ProxyFetchOptions extends RequestInit {
 	onDebugEnd?: (entries: Array<{ label: string; duration: number }>) => void;
 }
 
-async function performRequest(conn: ProxyConnection, url: URL, method: string, headers?: HeadersInit, body?: BodyInit | null, debug?: DebugContext) {
+async function performRequest(conn: ProxyConnection, url: URL, method: string, headers?: HeadersInit, body?: BodyInit | null, debug?: DebugContext, reader?: ReadableStreamDefaultReader<Uint8Array>) {
 	const reqBytes = buildRequest(url, method, headers, body);
 	debug?.dump(reqBytes, 'http.request');
 
@@ -24,7 +24,9 @@ async function performRequest(conn: ProxyConnection, url: URL, method: string, h
 	await conn.write(reqBytes);
 	debug?.timeEnd('http.send');
 
-	const reader = conn.readable.getReader();
+	if (!reader) {
+		reader = conn.readable.getReader();
+	}
 	debug?.time('http.ttfb');
 	const parsed = await readHeaders(reader);
 	debug?.timeEnd('http.ttfb');
@@ -73,6 +75,9 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 	debug?.log(`-> ${method} ${url.toString()}`);
 	debug?.time('total');
 
+	let activeConn: ProxyConnection | null = null;
+	let activeReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+
 	for (let i = 0; i < MAX_REDIRECT; i++) {
 		const isTls = url.protocol === 'https:';
 		const port = url.port ? Number(url.port) : isTls ? 443 : 80;
@@ -80,19 +85,34 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 
 		if (i > 0) debug?.log(`Redirect #${i}: ${method} ${url.toString()}`);
 
-		const conn = proxyStr
-			? await proxy.createConnection(conOpts, undefined, debug)
-			: await (proxy as Proxy).acquireConnection(conOpts, undefined, debug);
+		const targetKey = `${conOpts.host}:${conOpts.port}`;
+		const activeKey = activeConn ? `${activeConn.target.host}:${activeConn.target.port}` : null;
+		if (!activeConn || activeConn.closed || activeKey !== targetKey) {
+			if (activeConn && !activeConn.closed) {
+				activeConn.close();
+				if (activeReader) { activeReader.releaseLock(); activeReader = null; }
+			}
+			activeConn = proxyStr
+				? await proxy.createConnection(conOpts, undefined, debug)
+				: await (proxy as Proxy).acquireConnection(conOpts, undefined, debug);
+			activeReader = null;
+		}
 		let freed = false;
 		const free = () => {
 			if (!freed) {
 				freed = true;
-				release(conn);
+				release(activeConn!);
+				activeConn = null;
+				if (activeReader) {
+					activeReader.releaseLock();
+					activeReader = null;
+				}
 			}
 		};
 
 		try {
-			const { reader, status, statusText, headers: rh, initialBytes } = await performRequest(conn, url, method, headers, body, debug);
+			const { reader, status, statusText, headers: rh, initialBytes } = await performRequest(activeConn, url, method, headers, body, debug, activeReader);
+			activeReader = reader;
 
 			if (!REDIRECT_STATUSES.has(status)) {
 				const cl = rh.get('Content-Length');
@@ -109,16 +129,28 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 						debug?.log(` ${e.label.padEnd(maxLabel)} ${e.duration.toFixed(1)}ms`);
 					}
 				}
+				activeReader = null;
+				const conn = activeConn!;
+				activeConn = null;
 				return streamResponse(conn, reader, initialBytes, status, statusText, rh, ce === 'gzip');
 			}
 
-			conn.close();
-			freed = true;
+			const cl = rh.get('Content-Length');
+			if (cl) {
+				const bodyLen = Number(cl);
+				let drained = initialBytes.length;
+				while (drained < bodyLen) {
+					const { value, done } = await reader.read();
+					if (done) break;
+					drained += value.length;
+				}
+			}
 			const location = rh.get('Location');
 			if (!location) {
 				debug?.log('Redirect without Location header');
 				debug?.timeEnd('total');
 				options.onDebugEnd?.(debug?.getEntries() ?? []);
+				free();
 				return new Response(initialBytes, { status, statusText, headers: rh });
 			}
 			url = new URL(location, url);
@@ -128,7 +160,8 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 			}
 		} catch (e) {
 			debug?.log(`Error: ${e instanceof Error ? e.message : String(e)}`);
-			if (!freed) conn.close();
+			if (activeReader) { activeReader.releaseLock(); activeReader = null; }
+			if (!freed && activeConn) { activeConn.close(); activeConn = null; }
 			throw e;
 		}
 	}
@@ -136,5 +169,9 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 	debug?.log('Too many redirects');
 	debug?.timeEnd('total');
 	options.onDebugEnd?.(debug?.getEntries() ?? []);
+	if (activeConn) {
+		if (activeReader) activeReader.releaseLock();
+		release(activeConn);
+	}
 	return new Response('Too many redirects', { status: 499 });
 }
