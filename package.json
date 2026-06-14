@@ -1,25 +1,34 @@
 {
 	"name": "cf-fetch-socks",
 	"version": "0.0.0",
-	"private": true,
+	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"files": [
+		"dist"
+	],
 	"scripts": {
-		"deploy": "wrangler deploy",
-		"dev": "wrangler dev",
-		"start": "wrangler dev",
+		"build": "bun run build.ts && tsc --emitDeclarationOnly --outDir dist",
 		"test": "vitest run",
 		"test:unit": "vitest run test/unit/",
 		"test:integration": "vitest run test/integration/",
 		"test:e2e": "vitest run --config vitest.config.e2e.mts",
-		"test:all": "npm test && npm run test:e2e",
-		"cf-typegen": "wrangler types"
+		"test:all": "npm test && npm run test:e2e"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.12.4",
+		"@cloudflare/workers-types": "^4.20260612.1",
 		"@types/node": "^25.9.3",
 		"typescript": "^5.5.2",
 		"vitest": "~3.2.0",
-		"wrangler": "^4.100.0",
-		"@cloudflare/workers-types": "^4.20260612.1"
+		"wrangler": "^4.100.0"
 	},
 	"dependencies": {
 		"@reclaimprotocol/tls": "^0.1.3"
