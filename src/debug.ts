@@ -14,17 +14,26 @@ export interface DebugContext {
 	getEntries(): DebugEntry[];
 }
 
-export function createDebugger(enabled?: boolean): DebugContext | undefined {
+export function createDebugger(
+	enabled?: boolean,
+	logFn?: (msg: string) => void,
+	onLine?: (line: string) => void,
+): DebugContext | undefined {
 	if (!enabled) return undefined;
 
 	const id = crypto.randomUUID().slice(0, 8);
 	const prefix = `[DEBUG:${id}]`;
 	const timers = new Map<string, number>();
 	const entries: DebugEntry[] = [];
+	const out = (msg: string) => {
+		const line = `${prefix} ${msg}`;
+		logFn?.(line);
+		onLine?.(line);
+	};
 
 	return {
 		log(msg: string) {
-			console.log(`${prefix} ${msg}`);
+			out(msg);
 		},
 
 		time(label: string) {
@@ -36,7 +45,7 @@ export function createDebugger(enabled?: boolean): DebugContext | undefined {
 			if (start === undefined) return;
 			const dur = performance.now() - start;
 			entries.push({ label, duration: dur });
-			console.log(`${prefix} [${dur.toFixed(1)}ms] ${label}`);
+			out(`[${dur.toFixed(1)}ms] ${label}`);
 			timers.delete(label);
 		},
 
@@ -45,7 +54,7 @@ export function createDebugger(enabled?: boolean): DebugContext | undefined {
 			const view = bytes.length > 64 ? bytes.subarray(0, 64) : bytes;
 			const hex = Array.from(view).map(b => b.toString(16).padStart(2, '0')).join(' ');
 			const suffix = bytes.length > 64 ? ` ... (${bytes.length} bytes)` : ` (${bytes.length} bytes)`;
-			console.log(`${prefix} ${label}: ${hex}${suffix}`);
+			out(`${label}: ${hex}${suffix}`);
 		},
 
 		getLogFn(): LogFn {

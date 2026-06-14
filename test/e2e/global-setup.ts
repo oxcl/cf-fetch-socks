@@ -28,13 +28,9 @@ export function setup(): void {
 			secrets[key] = value;
 		}
 	}
-	execSync(`bun wrangler secret bulk --name cf-fetch-socks-e2e`, {
-		input: JSON.stringify(secrets),
-		encoding: 'utf-8',
-		stdio: ['pipe', 'inherit', 'inherit'],
-		timeout: 30_000,
-	});
 
+	// Deploy → secrets → deploy again, because secret bulk creates a blank
+	// version that can override the deployed code.
 	const output = execSync(
 		`bun wrangler deploy --config "${CONFIG}"`,
 		{
@@ -44,6 +40,19 @@ export function setup(): void {
 		},
 	);
 	process.stdout.write(output);
+
+	execSync(`bun wrangler secret bulk --name cf-fetch-socks-e2e`, {
+		input: JSON.stringify(secrets),
+		encoding: 'utf-8',
+		stdio: ['pipe', 'inherit', 'inherit'],
+		timeout: 30_000,
+	});
+
+	execSync(`bun wrangler deploy --config "${CONFIG}"`, {
+		encoding: 'utf-8',
+		stdio: ['pipe', 'inherit', 'inherit'],
+		timeout: 120_000,
+	});
 
 	const match = output.match(/https:\/\/[^\s]+\.workers\.dev/);
 	if (!match) {

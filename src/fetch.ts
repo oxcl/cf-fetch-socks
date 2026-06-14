@@ -11,6 +11,9 @@ import type { DebugContext } from './debug';
 export interface ProxyFetchOptions extends RequestInit {
 	proxy: string | Proxy;
 	debug?: boolean;
+	logFn?: (msg: string) => void;
+	onLine?: (line: string) => void;
+	onDebugEnd?: (entries: Array<{ label: string; duration: number }>) => void;
 }
 
 async function performRequest(conn: ProxyConnection, url: URL, method: string, headers?: HeadersInit, body?: BodyInit | null, debug?: DebugContext) {
@@ -48,13 +51,16 @@ function streamResponse(
 			{ status, statusText, headers },
 		);
 	}
+	const cl = headers.get('Content-Length');
+	const contentLength = cl ? Number(cl) : undefined;
+	if (contentLength !== undefined) headers.delete('Content-Length');
 	const { readable, writable } = new TransformStream();
-	pipeReaderToWriter(reader, writable.getWriter(), initialBytes, () => conn.close());
+	pipeReaderToWriter(reader, writable.getWriter(), initialBytes, () => conn.close(), contentLength);
 	return new Response(readable, { status, statusText, headers });
 }
 
 export async function socksFetch(urlOrString: string | URL, options: ProxyFetchOptions): Promise<Response> {
-	const debug = createDebugger(options.debug);
+	const debug = createDebugger(options.debug, options.logFn, options.onLine);
 	const proxyStr = typeof options.proxy === 'string' ? options.proxy : null;
 	const proxy = proxyStr ? Proxy.acquireProxy(proxyStr) : (options.proxy as Proxy);
 	const release = (conn: ProxyConnection) => {
@@ -96,6 +102,7 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 
 				debug?.timeEnd('total');
 				const entries = debug?.getEntries() ?? [];
+				options.onDebugEnd?.(entries);
 				if (entries.length > 0) {
 					debug?.log('── waterfall ──');
 					const maxLabel = Math.max(...entries.map(e => e.label.length), 5);
@@ -112,6 +119,7 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 			if (!location) {
 				debug?.log('Redirect without Location header');
 				debug?.timeEnd('total');
+				options.onDebugEnd?.(debug?.getEntries() ?? []);
 				return new Response(initialBytes, { status, statusText, headers: rh });
 			}
 			url = new URL(location, url);
@@ -128,5 +136,6 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 
 	debug?.log('Too many redirects');
 	debug?.timeEnd('total');
+	options.onDebugEnd?.(debug?.getEntries() ?? []);
 	return new Response('Too many redirects', { status: 499 });
 }

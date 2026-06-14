@@ -1,6 +1,6 @@
 import { Proxy } from '../../src/proxy';
 import { socks5Tunnel } from '../../src/socks5/index';
-import * as testFetch from './test-fetch/test-fetch.route';
+import { handleRequest } from './router';
 
 type Env = {
 	SOCKS5_PROXY_HOSTNAME: string;
@@ -8,10 +8,6 @@ type Env = {
 	SOCKS5_PROXY_USERNAME: string;
 	SOCKS5_PROXY_PASSWORD: string;
 };
-
-const routes: { path: string; handler: (proxy: Proxy) => Promise<Response> }[] = [
-	testFetch,
-];
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
@@ -23,14 +19,13 @@ export default {
 		});
 
 		const url = new URL(request.url);
+		const result = handleRequest(url.pathname, proxy);
 
-		for (const route of routes) {
-			if (url.pathname === route.path) {
-				try {
-					return await route.handler(proxy);
-				} catch (e) {
-					return new Response(String(e), { status: 500 });
-				}
+		if (result) {
+			try {
+				return await result;
+			} catch (e) {
+				return new Response(String(e), { status: 500 });
 			}
 		}
 

@@ -13,13 +13,17 @@ export async function pipeReaderToWriter(
 	writer: WritableStreamDefaultWriter<Uint8Array>,
 	initialBytes: Uint8Array,
 	cleanup: () => void,
+	contentLength?: number,
 ): Promise<void> {
 	try {
+		let remaining = contentLength !== undefined ? contentLength - initialBytes.length : -1;
 		if (initialBytes.length > 0) await writer.write(initialBytes);
 		while (true) {
+			if (remaining === 0) break;
 			const { value, done } = await reader.read();
 			if (done) break;
 			await writer.write(value);
+			if (remaining > 0) remaining -= value.length;
 		}
 	} finally {
 		await writer.close();
