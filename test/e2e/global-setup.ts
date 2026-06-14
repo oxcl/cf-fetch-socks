@@ -18,29 +18,32 @@ let deployed = false;
 
 export function setup(): void {
 	const vars = fs.readFileSync(DEV_VARS, 'utf-8');
+	const secrets: Record<string, string> = {};
 	for (const line of vars.split('\n')) {
 		const eq = line.indexOf('=');
 		if (eq === -1) continue;
 		const key = line.slice(0, eq).trim();
 		const value = line.slice(eq + 1).trim();
 		if (SECRET_KEYS.includes(key)) {
-			execSync(`bun wrangler secret put "${key}" --name cf-fetch-socks-e2e`, {
-				input: value,
-				encoding: 'utf-8',
-				stdio: ['pipe', 'ignore', 'ignore'],
-				timeout: 30_000,
-			});
+			secrets[key] = value;
 		}
 	}
+	execSync(`bun wrangler secret bulk --name cf-fetch-socks-e2e`, {
+		input: JSON.stringify(secrets),
+		encoding: 'utf-8',
+		stdio: ['pipe', 'inherit', 'inherit'],
+		timeout: 30_000,
+	});
 
 	const output = execSync(
 		`bun wrangler deploy --config "${CONFIG}"`,
 		{
 			encoding: 'utf-8',
-			stdio: ['ignore', 'pipe', 'inherit'],
+			stdio: ['pipe', 'pipe', 'inherit'],
 			timeout: 120_000,
 		},
 	);
+	process.stdout.write(output);
 
 	const match = output.match(/https:\/\/[^\s]+\.workers\.dev/);
 	if (!match) {

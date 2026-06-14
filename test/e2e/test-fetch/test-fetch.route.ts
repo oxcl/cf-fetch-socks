@@ -1,4 +1,5 @@
-import { socksFetch, Proxy } from '../../../src';
+import { Proxy } from '../../../src';
+import { socksFetch } from '../fetch-wrapper';
 
 const HTTPBIN_BASE = 'https://httpbin.org';
 

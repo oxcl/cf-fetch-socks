@@ -1,5 +1,6 @@
 import type { ConnectFn, LogFn } from './socket';
 import { defaultConnect } from './socket';
+import type { DebugContext } from './debug';
 import { openConnection, type ProxyConnection, type ProxyTarget, type ProxyCredentials, type TunnelFn } from './connection';
 import { socks5Tunnel } from './socks5/index';
 import { parseProxyUri } from './utils';
@@ -41,18 +42,19 @@ export class Proxy {
 		this.log('Proxy is reachable');
 	}
 
-	async acquire(target: ProxyTarget, signal?: AbortSignal): Promise<ProxyConnection> {
+	async acquire(target: ProxyTarget, signal?: AbortSignal, debug?: DebugContext): Promise<ProxyConnection> {
 		this.log(`Opening new connection to ${target.host}:${target.port}`);
-		return openConnection(this.tunnelFn, this.opts, target, this.connectFn, this.log, signal);
+		debug?.log(`Opening new connection to ${target.host}:${target.port}`);
+		return openConnection(this.tunnelFn, this.opts, target, this.connectFn, this.log, signal, debug);
 	}
 
-	async createConnection(target: ProxyTarget, signal?: AbortSignal): Promise<ProxyConnection> {
-		return this.acquire(target, signal);
+	async createConnection(target: ProxyTarget, signal?: AbortSignal, debug?: DebugContext): Promise<ProxyConnection> {
+		return this.acquire(target, signal, debug);
 	}
 
 	closeConnection(conn: ProxyConnection): void { conn.close(); }
 
-	async acquireConnection(target: ProxyTarget, signal?: AbortSignal): Promise<ProxyConnection> {
+	async acquireConnection(target: ProxyTarget, signal?: AbortSignal, debug?: DebugContext): Promise<ProxyConnection> {
 		const key = `${target.host}:${target.port}`;
 		const conns = this.pool.get(key) ?? [];
 		const idx = conns.findIndex((c) => !c.closed && !this.busy.has(c));
@@ -60,9 +62,11 @@ export class Proxy {
 			const [conn] = conns.splice(idx, 1);
 			if (conns.length === 0) this.pool.delete(key);
 			this.busy.add(conn);
+			debug?.log(`Pool HIT (${conns.length} idle remaining)`);
 			return conn;
 		}
-		const conn = await this.acquire(target, signal);
+		debug?.log('Pool MISS');
+		const conn = await this.acquire(target, signal, debug);
 		this.busy.add(conn);
 		return conn;
 	}

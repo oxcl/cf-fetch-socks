@@ -3,6 +3,7 @@ import { makeTLSClient, setCryptoImplementation } from '@reclaimprotocol/tls';
 import { webcryptoCrypto } from '@reclaimprotocol/tls/webcrypto';
 import type { LogFn } from './socket';
 import type { ProxyTarget, ProxyConnection } from './connection';
+import type { DebugContext } from './debug';
 import { TlsSessionError } from './errors';
 import { pumpSocket, makeTlsReadable, type TlsState } from './tls-helpers';
 
@@ -20,12 +21,16 @@ export async function wrapTls(
 	target: ProxyTarget,
 	log: LogFn,
 	signal?: AbortSignal,
+	debug?: DebugContext,
 ): Promise<ProxyConnection> {
 	let closed = false;
 	const writer = socket.writable.getWriter();
 	const s: TlsState = { chunks: [], resolveAppData: null, tlsWrite: null, tlsEnded: false, tlsError: null };
 
+	debug?.dump(leftover, 'tls.leftover');
+
 	const handshakeDone = new Promise<void>((resolve, reject) => {
+		debug?.time('tls.handshake');
 		const tls = makeTLSClient({
 			host: target.host, verifyServerCertificate: true, cipherSuites: CIPHERS,
 			async write({ header, content }) {
@@ -34,6 +39,7 @@ export async function wrapTls(
 				await writer.write(data);
 			},
 			onHandshake() {
+				debug?.timeEnd('tls.handshake');
 				log('TLS handshake completed');
 				s.tlsWrite = (data: Uint8Array) => tls.write(data);
 				resolve();
