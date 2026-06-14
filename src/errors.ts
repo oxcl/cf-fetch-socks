@@ -99,3 +99,24 @@ export class GatewayTimeoutError extends ProxyError {
 		this.name = 'GatewayTimeoutError';
 	}
 }
+
+export function checkProxyError(status: number, bodyText: string): void {
+	switch (status) {
+		case 407:
+			throw new ProxyAuthError();
+		case 403:
+			throw new ProxyForbiddenError();
+		case 502:
+			throw new BadGatewayError();
+		case 504:
+			throw new GatewayTimeoutError();
+	}
+
+	const lowerBody = bodyText.toLowerCase();
+	if (lowerBody.includes('proxy') && (lowerBody.includes('denied') || lowerBody.includes('blocked') || lowerBody.includes('refused'))) {
+		throw new ProxyError(`Proxy error: ${bodyText.slice(0, 200)}`, status);
+	}
+	if (lowerBody.includes('connection refused')) {
+		throw new ProxyError('Connection refused by target', status);
+	}
+}
