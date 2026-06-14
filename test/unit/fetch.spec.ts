@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { fetch } from '../src/fetch';
-import { Proxy } from '../src/proxy';
-import { socks5Tunnel } from '../src/socks5';
+import { fetch } from '../../src/fetch';
+import { Proxy } from '../../src/proxy';
+import { socks5Tunnel } from '../../src/socks5';
 
 describe('fetch', () => {
 	it('exports a fetch function', () => {

@@ -5,7 +5,7 @@ import {
 	SELF,
 } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
-import worker from "../src/index";
+import worker from "../../src/index";
 
 const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
 
