@@ -23,7 +23,7 @@ describe('test-fetch', () => {
 	it('makes a SOCKS5-proxied request and returns the proxy exit IP', async () => {
 		const response = await socksFetch('https://httpbin.org/ip', { proxy: makeProxy() });
 		expect(response.status).toBe(200);
-		const body = await response.json();
+		const body = await response.json() as { origin: string };
 		expect(body).toHaveProperty('origin');
 	});
 });
@@ -38,7 +38,7 @@ describe('POST with body', () => {
 			body: JSON.stringify({ hello: 'world' }),
 		});
 		expect(response.status).toBe(200);
-		const body = await response.json();
+		const body = await response.json() as { json: { hello: string } };
 		expect(body.json.hello).toBe('world');
 	});
 });
@@ -51,7 +51,7 @@ describe('custom headers', () => {
 			headers: { 'X-Custom': 'test-value', 'X-Another': '123' },
 		});
 		expect(response.status).toBe(200);
-		const body = await response.json();
+		const body = await response.json() as { headers: Record<string, string> };
 		expect(body.headers['X-Custom']).toBe('test-value');
 		expect(body.headers['X-Another']).toBe('123');
 	});
@@ -138,7 +138,7 @@ describe('gzip response', { timeout: 30_000 }, () => {
 		const proxy = makeProxy();
 		const response = await socksFetch('https://httpbin.org/gzip', { proxy });
 		expect(response.status).toBe(200);
-		const body = await response.json();
+		const body = await response.json() as { gzipped: boolean };
 		expect(body.gzipped).toBe(true);
 	});
 });
