@@ -4,8 +4,15 @@ import { webcryptoCrypto } from '@reclaimprotocol/tls/webcrypto';
 import type { LogFn } from './socket';
 import type { ProxyTarget, ProxyConnection } from './connection';
 import { TlsSessionError } from './errors';
+import { pumpSocket, makeTlsReadable, type TlsState } from './tls-helpers';
 
 setCryptoImplementation(webcryptoCrypto);
+
+const CIPHERS: NonNullable<Parameters<typeof makeTLSClient>[0]>['cipherSuites'] = [
+	'TLS_AES_256_GCM_SHA384', 'TLS_AES_128_GCM_SHA256',
+	'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384', 'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
+	'TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384', 'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256',
+];
 
 export async function wrapTls(
 	socket: Socket,
@@ -16,155 +23,53 @@ export async function wrapTls(
 ): Promise<ProxyConnection> {
 	let closed = false;
 	const writer = socket.writable.getWriter();
-
-	const chunks: Uint8Array[] = [];
-	let resolveAppData: (() => void) | null = null;
-	let tlsWrite: ((data: Uint8Array) => Promise<void>) | null = null;
-	let tlsEnded = false;
-	let tlsError: Error | null = null;
+	const s: TlsState = { chunks: [], resolveAppData: null, tlsWrite: null, tlsEnded: false, tlsError: null };
 
 	const handshakeDone = new Promise<void>((resolve, reject) => {
 		const tls = makeTLSClient({
-			host: target.host,
-			verifyServerCertificate: true,
-			cipherSuites: [
-				'TLS_AES_256_GCM_SHA384',
-				'TLS_AES_128_GCM_SHA256',
-				'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384',
-				'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
-				'TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384',
-				'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256',
-			],
+			host: target.host, verifyServerCertificate: true, cipherSuites: CIPHERS,
 			async write({ header, content }) {
 				const data = new Uint8Array(header.length + content.length);
-				data.set(header, 0);
-				data.set(content, header.length);
+				data.set(header, 0); data.set(content, header.length);
 				await writer.write(data);
 			},
 			onHandshake() {
 				log('TLS handshake completed');
-				tlsWrite = (data: Uint8Array) => tls.write(data);
+				s.tlsWrite = (data: Uint8Array) => tls.write(data);
 				resolve();
 			},
 			onApplicationData(plaintext) {
-				if (resolveAppData) {
-					resolveAppData();
-					resolveAppData = null;
-				}
-				chunks.push(plaintext);
+				if (s.resolveAppData) { s.resolveAppData(); s.resolveAppData = null; }
+				s.chunks.push(plaintext);
 			},
 			onTlsEnd(error) {
 				log(`TLS ended: ${error || 'ok'}`);
-				tlsEnded = true;
-				if (error) {
-					tlsError = new TlsSessionError(`TLS session ended with error: ${error}`);
-					reject(tlsError);
-				}
-				if (resolveAppData) {
-					resolveAppData();
-					resolveAppData = null;
-				}
+				s.tlsEnded = true;
+				if (error) { s.tlsError = new TlsSessionError(`TLS session error: ${error}`); reject(s.tlsError); }
+				if (s.resolveAppData) { s.resolveAppData(); s.resolveAppData = null; }
 			},
 		});
-
-		const reader = socket.readable.getReader();
-
-		const pump = async () => {
-			try {
-				while (true) {
-					const { value, done } = await reader.read();
-					if (done) break;
-					tls.handleReceivedBytes(value);
-				}
-			} catch {
-				// socket closed
-			} finally {
-				try {
-					reader.releaseLock();
-				} catch {}
-			}
-		};
-
-		pump();
-
-		if (leftover.length > 0) {
-			tls.handleReceivedBytes(leftover);
-		}
-
+		pumpSocket(socket, tls, leftover);
 		tls.startHandshake();
 	});
-
-	if (signal?.aborted) {
-		try {
-			writer.releaseLock();
-		} catch {}
-		try {
-			socket.close();
-		} catch {}
-		throw new Error('Request aborted');
-	}
 
 	const close = () => {
 		if (closed) return;
 		closed = true;
-		try {
-			writer.releaseLock();
-		} catch {}
-		try {
-			socket.close();
-		} catch {}
+		try { writer.releaseLock(); } catch { /* ignore */ }
+		try { socket.close(); } catch { /* ignore */ }
 	};
 
 	return {
 		target,
-		get closed() {
-			return closed;
-		},
+		get closed() { return closed; },
 		async write(data: Uint8Array) {
 			if (closed) throw new Error('Connection closed');
 			await handshakeDone;
-			if (!tlsWrite) throw new Error('TLS not ready');
-			await tlsWrite(data);
+			if (!s.tlsWrite) throw new Error('TLS not ready');
+			await s.tlsWrite(data);
 		},
-		get readable(): ReadableStream<Uint8Array> {
-			return new ReadableStream({
-				async pull(controller) {
-					await handshakeDone;
-
-					if (tlsError) {
-						controller.error(tlsError);
-						return;
-					}
-
-					if (chunks.length > 0) {
-						const chunk = chunks.shift()!;
-						controller.enqueue(chunk);
-						return;
-					}
-
-					if (tlsEnded) {
-						controller.close();
-						return;
-					}
-
-					await new Promise<void>((resolve) => {
-						resolveAppData = resolve;
-					});
-
-					if (tlsError) {
-						controller.error(tlsError);
-					} else if (chunks.length > 0) {
-						const chunk = chunks.shift()!;
-						controller.enqueue(chunk);
-					} else {
-						controller.close();
-					}
-				},
-				cancel() {
-					close();
-				},
-			});
-		},
+		get readable() { return makeTlsReadable(s, handshakeDone, close); },
 		close,
 	};
 }

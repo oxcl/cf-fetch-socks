@@ -54,23 +54,17 @@ function wrapRaw(socket: Socket, target: ProxyTarget): ProxyConnection {
 
 	return {
 		target,
-		get closed() {
-			return closed;
-		},
+		get closed() { return closed; },
 		async write(data: Uint8Array) {
 			if (closed) throw new Error('Connection closed');
 			await writer.write(data);
 		},
-		readable: socket.readable as ReadableStream<Uint8Array>,
+		readable: socket.readable as unknown as ReadableStream<Uint8Array>,
 		close() {
 			if (closed) return;
 			closed = true;
-			try {
-				writer.releaseLock();
-			} catch {}
-			try {
-				socket.close();
-			} catch {}
+			try { writer.releaseLock(); } catch { /* ignore */ }
+			try { socket.close(); } catch { /* ignore */ }
 		},
 	};
 }

@@ -1,69 +1,27 @@
 export class TunnelError extends Error {
-	constructor(
-		message: string,
-		public readonly code: string,
-		cause?: unknown,
-	) {
+	constructor(message: string, public readonly code: string, cause?: unknown) {
 		super(message, { cause });
 		this.name = 'TunnelError';
 	}
 }
 
-export class Socks5ProtocolError extends TunnelError {
-	constructor(message: string, cause?: unknown) {
-		super(message, 'SOCKS5_PROTOCOL_ERROR', cause);
-		this.name = 'Socks5ProtocolError';
-	}
+function tunnelError(name: string, code: string) {
+	return class extends TunnelError {
+		constructor(message: string, cause?: unknown) {
+			super(message, code, cause);
+			this.name = name;
+		}
+	};
 }
 
-export class Socks5AuthError extends TunnelError {
-	constructor(message: string, cause?: unknown) {
-		super(message, 'SOCKS5_AUTH_ERROR', cause);
-		this.name = 'Socks5AuthError';
-	}
-}
-
-export class Socks5ServerError extends TunnelError {
-	constructor(message: string, cause?: unknown) {
-		super(message, 'SOCKS5_SERVER_ERROR', cause);
-		this.name = 'Socks5ServerError';
-	}
-}
-
-export class ConnectionRefusedError extends TunnelError {
-	constructor(message: string, cause?: unknown) {
-		super(message, 'CONNECTION_REFUSED', cause);
-		this.name = 'ConnectionRefusedError';
-	}
-}
-
-export class ConnectionTimeoutError extends TunnelError {
-	constructor(message: string, cause?: unknown) {
-		super(message, 'CONNECTION_TIMEOUT', cause);
-		this.name = 'ConnectionTimeoutError';
-	}
-}
-
-export class TlsUpgradeError extends TunnelError {
-	constructor(message: string, cause?: unknown) {
-		super(message, 'TLS_UPGRADE_ERROR', cause);
-		this.name = 'TlsUpgradeError';
-	}
-}
-
-export class AbortError extends TunnelError {
-	constructor(message: string, cause?: unknown) {
-		super(message, 'ABORT', cause);
-		this.name = 'AbortError';
-	}
-}
-
-export class TlsSessionError extends TunnelError {
-	constructor(message: string, cause?: unknown) {
-		super(message, 'TLS_SESSION_ERROR', cause);
-		this.name = 'TlsSessionError';
-	}
-}
+export const Socks5ProtocolError = tunnelError('Socks5ProtocolError', 'SOCKS5_PROTOCOL_ERROR');
+export const Socks5AuthError = tunnelError('Socks5AuthError', 'SOCKS5_AUTH_ERROR');
+export const Socks5ServerError = tunnelError('Socks5ServerError', 'SOCKS5_SERVER_ERROR');
+export const ConnectionRefusedError = tunnelError('ConnectionRefusedError', 'CONNECTION_REFUSED');
+export const ConnectionTimeoutError = tunnelError('ConnectionTimeoutError', 'CONNECTION_TIMEOUT');
+export const TlsUpgradeError = tunnelError('TlsUpgradeError', 'TLS_UPGRADE_ERROR');
+export const AbortError = tunnelError('AbortError', 'ABORT');
+export const TlsSessionError = tunnelError('TlsSessionError', 'TLS_SESSION_ERROR');
 
 export class ProxyError extends Error {
 	constructor(message: string, public readonly status: number) {
@@ -102,21 +60,17 @@ export class GatewayTimeoutError extends ProxyError {
 
 export function checkProxyError(status: number, bodyText: string): void {
 	switch (status) {
-		case 407:
-			throw new ProxyAuthError();
-		case 403:
-			throw new ProxyForbiddenError();
-		case 502:
-			throw new BadGatewayError();
-		case 504:
-			throw new GatewayTimeoutError();
+		case 407: throw new ProxyAuthError();
+		case 403: throw new ProxyForbiddenError();
+		case 502: throw new BadGatewayError();
+		case 504: throw new GatewayTimeoutError();
 	}
 
-	const lowerBody = bodyText.toLowerCase();
-	if (lowerBody.includes('proxy') && (lowerBody.includes('denied') || lowerBody.includes('blocked') || lowerBody.includes('refused'))) {
+	const lower = bodyText.toLowerCase();
+	if (lower.includes('proxy') && (lower.includes('denied') || lower.includes('blocked') || lower.includes('refused'))) {
 		throw new ProxyError(`Proxy error: ${bodyText.slice(0, 200)}`, status);
 	}
-	if (lowerBody.includes('connection refused')) {
+	if (lower.includes('connection refused')) {
 		throw new ProxyError('Connection refused by target', status);
 	}
 }

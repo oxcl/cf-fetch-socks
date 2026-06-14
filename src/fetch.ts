@@ -1,114 +1,87 @@
 import { Proxy } from './proxy';
-import { buildRequest, readHeaders, drainReader, createGunzipStream } from './http';
+import { buildRequest } from './http/request';
+import { readHeaders } from './http/response';
+import { createGunzipStream, drainReader, pipeReaderToWriter } from './http/stream';
 import { checkProxyError } from './errors';
 import type { ProxyConnection } from './connection';
-
-const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+import { MAX_REDIRECT, REDIRECT_STATUSES } from './constants';
 
 export interface ProxyFetchOptions extends RequestInit {
 	proxy: string | Proxy;
 }
 
-export async function socksFetch(url: string | URL, options?: ProxyFetchOptions): Promise<Response> {
-	const proxyOpt = options?.proxy;
-	const isOwned = typeof proxyOpt === 'string';
-	const proxy = isOwned
-		? Proxy.acquireProxy(proxyOpt)
-		: (proxyOpt as Proxy);
+async function performRequest(conn: ProxyConnection, url: URL, method: string, headers?: HeadersInit, body?: BodyInit | null) {
+	await conn.write(buildRequest(url, method, headers, body));
+	const reader = conn.readable.getReader();
+	const parsed = await readHeaders(reader);
+	checkProxyError(parsed.status, new TextDecoder().decode(parsed.initialBytes));
+	return { reader, ...parsed };
+}
 
-	const cleanup = (conn: ProxyConnection) => {
-		if (isOwned) {
-			proxy.closeConnection(conn);
-		} else {
-			proxy.revokeConnection(conn);
-		}
-	};
-
-	let currentUrl = new URL(url);
-	let method = (options?.method ?? 'GET').toUpperCase();
-	let headers = options?.headers;
-	let body = options?.body;
-
-	try {
-		for (let i = 0; i < 20; i++) {
-			const isTls = currentUrl.protocol === 'https:';
-			const targetPort = currentUrl.port ? Number(currentUrl.port) : isTls ? 443 : 80;
-			const target = { host: currentUrl.hostname, port: targetPort, tls: isTls };
-
-			const conn = isOwned
-				? await proxy.createConnection(target)
-				: await proxy.acquireConnection(target);
-
-			let connCleanedUp = false;
-			const safeCleanup = () => {
-				if (!connCleanedUp) {
-					connCleanedUp = true;
-					cleanup(conn);
-				}
-			};
-
-			try {
-				const requestBytes = buildRequest(currentUrl, method, headers, body);
-				await conn.write(requestBytes);
-
-				const reader = conn.readable.getReader();
-				const { status, statusText, headers: respHeaders, initialBytes } = await readHeaders(reader);
-
-				const initialText = new TextDecoder().decode(initialBytes);
-				checkProxyError(status, initialText);
-
-				if (!REDIRECT_STATUSES.has(status)) {
-					const contentEncoding = respHeaders.get('Content-Encoding');
-
-					if (contentEncoding === 'gzip') {
-						const bodyStream = createGunzipStream(conn.readable, initialBytes, safeCleanup);
-						respHeaders.delete('Content-Encoding');
-						respHeaders.delete('Content-Length');
-						return new Response(bodyStream, { status, statusText, headers: respHeaders });
-					}
-
-					const { readable, writable } = new TransformStream();
-					const writer = writable.getWriter();
-					(async () => {
-						try {
-							if (initialBytes.length > 0) await writer.write(initialBytes);
-							while (true) {
-								const { value, done } = await reader.read();
-								if (done) break;
-								await writer.write(value);
-							}
-						} finally {
-							await writer.close();
-							safeCleanup();
-						}
-					})();
-					return new Response(readable, { status, statusText, headers: respHeaders });
-				}
-
-				await drainReader(reader);
-				safeCleanup();
-
-				const location = respHeaders.get('Location');
-				if (!location) {
-					return new Response(initialBytes, { status, statusText, headers: respHeaders });
-				}
-
-				currentUrl = new URL(location, currentUrl);
-
-				if (status === 301 || status === 302 || status === 303) {
-					method = 'GET';
-					body = undefined;
-				}
-			} catch (error) {
-				if (!connCleanedUp) {
-					conn.close();
-				}
-				throw error;
-			}
-		}
-
-		return new Response('Too many redirects', { status: 499 });
-	} catch (error) {
-		throw error;
+function streamResponse(
+	conn: ProxyConnection,
+	reader: ReadableStreamDefaultReader<Uint8Array>,
+	initialBytes: Uint8Array,
+	status: number,
+	statusText: string,
+	headers: Headers,
+	isGzip: boolean,
+): Response {
+	if (isGzip) {
+		headers.delete('Content-Encoding');
+		headers.delete('Content-Length');
+		return new Response(
+			createGunzipStream(conn.readable, initialBytes, () => conn.close()),
+			{ status, statusText, headers },
+		);
 	}
+	const { readable, writable } = new TransformStream();
+	pipeReaderToWriter(reader, writable.getWriter(), initialBytes, () => conn.close());
+	return new Response(readable, { status, statusText, headers });
+}
+
+export async function socksFetch(urlOrString: string | URL, options: ProxyFetchOptions): Promise<Response> {
+	const proxyStr = typeof options.proxy === 'string' ? options.proxy : null;
+	const proxy = proxyStr ? Proxy.acquireProxy(proxyStr) : (options.proxy as Proxy);
+	const release = (conn: ProxyConnection) => (proxyStr ? proxy.closeConnection(conn) : (proxy as Proxy).revokeConnection(conn));
+	let url = new URL(urlOrString);
+	let method = (options.method ?? 'GET').toUpperCase();
+	let { headers, body } = options;
+
+	for (let i = 0; i < MAX_REDIRECT; i++) {
+		const isTls = url.protocol === 'https:';
+		const port = url.port ? Number(url.port) : isTls ? 443 : 80;
+		const conOpts = { host: url.hostname, port, tls: isTls };
+		const conn = proxyStr ? await proxy.createConnection(conOpts) : await (proxy as Proxy).acquireConnection(conOpts);
+		let freed = false;
+		const free = () => {
+			if (!freed) {
+				freed = true;
+				release(conn);
+			}
+		};
+
+		try {
+			const { reader, status, statusText, headers: rh, initialBytes } = await performRequest(conn, url, method, headers, body);
+
+			if (!REDIRECT_STATUSES.has(status)) {
+				return streamResponse(conn, reader, initialBytes, status, statusText, rh, rh.get('Content-Encoding') === 'gzip');
+			}
+
+			await drainReader(reader);
+			free();
+			const location = rh.get('Location');
+			if (!location) return new Response(initialBytes, { status, statusText, headers: rh });
+			url = new URL(location, url);
+			if (status !== 307 && status !== 308) {
+				method = 'GET';
+				body = undefined;
+			}
+		} catch (e) {
+			if (!freed) conn.close();
+			throw e;
+		}
+	}
+
+	return new Response('Too many redirects', { status: 499 });
 }

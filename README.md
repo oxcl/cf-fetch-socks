@@ -41,7 +41,6 @@ npx wrangler secret put SOCKS5_PROXY_HOSTNAME
 npx wrangler secret put SOCKS5_PROXY_PORT
 npx wrangler secret put SOCKS5_PROXY_USERNAME
 npx wrangler secret put SOCKS5_PROXY_PASSWORD
-npx wrangler secret put CEREBRAS_API_KEY
 ```
 
 **Run:**
