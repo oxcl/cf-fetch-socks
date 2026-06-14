@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { env } from 'cloudflare:test';
 import { Proxy, socks5Tunnel } from '../../src';
 import { socksFetch } from './helpers';
-import { AbortError, Socks5ServerError, TunnelError } from '../../src/errors';
+import { AbortError, Socks5AuthError, Socks5ProtocolError, Socks5ServerError, TunnelError } from '../../src/errors';
 
 function makeProxy() {
 	return new Proxy(socks5Tunnel, {
@@ -140,5 +140,39 @@ describe('gzip response', { timeout: 30_000 }, () => {
 		expect(response.status).toBe(200);
 		const body = await response.json() as { gzipped: boolean };
 		expect(body.gzipped).toBe(true);
+	});
+});
+
+describe('SOCKS5 username/password auth', () => {
+	it('should connect through an authenticated SOCKS5 proxy with valid credentials', async () => {
+		const proxy = makeProxy();
+		const conn = await proxy.acquire({ host: 'httpbin.org', port: 443, tls: true });
+		expect(conn).toBeDefined();
+		expect(conn.closed).toBe(false);
+		conn.close();
+	});
+
+	it('should throw on SOCKS5 auth failure (wrong credentials)', async () => {
+		const badProxy = new Proxy(socks5Tunnel, {
+			hostname: env.SOCKS5_PROXY_HOSTNAME,
+			port: Number(env.SOCKS5_PROXY_PORT),
+			username: 'wronguser',
+			password: 'wrongpass',
+		});
+		await expect(
+			badProxy.acquire({ host: 'httpbin.org', port: 80, tls: false }),
+		).rejects.toThrow(Socks5AuthError);
+	});
+
+	it('should throw when proxy offers no acceptable auth method', async () => {
+		const { receiveGreeting } = await import('../../src/socks5/greeting');
+		const stream = new ReadableStream({
+			start(controller) {
+				controller.enqueue(new Uint8Array([5, 0xFF]));
+				controller.close();
+			},
+		});
+		const reader = stream.getReader() as ReadableStreamDefaultReader<Uint8Array>;
+		await expect(receiveGreeting(reader)).rejects.toThrow(Socks5ProtocolError);
 	});
 });

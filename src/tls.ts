@@ -29,42 +29,48 @@ export async function wrapTls(
 
 	debug?.dump(leftover, 'tls.leftover');
 
+	debug?.time('tls.handshake');
+
 	const handshakeDone = new Promise<void>((resolve, reject) => {
-		debug?.time('tls.handshake');
-		const tls = makeTLSClient({
-			host: target.host, verifyServerCertificate: true, cipherSuites: CIPHERS,
-			async write({ header, content }) {
-				const data = new Uint8Array(header.length + content.length);
-				data.set(header, 0); data.set(content, header.length);
-				await writer.write(data);
-			},
-			onHandshake() {
-				debug?.timeEnd('tls.handshake');
-				log('TLS handshake completed');
-				s.tlsWrite = (data: Uint8Array) => tls.write(data);
-				resolve();
-			},
-			onApplicationData(plaintext) {
-				if (s.resolveAppData) { s.resolveAppData(); s.resolveAppData = null; }
-				s.chunks.push(plaintext);
-			},
+		s.resolveHandshake = resolve;
+		s.rejectHandshake = reject;
+	});
+
+	const tls = makeTLSClient({
+		host: target.host, verifyServerCertificate: true, cipherSuites: CIPHERS,
+		async write({ header, content }) {
+			const data = new Uint8Array(header.length + content.length);
+			data.set(header, 0); data.set(content, header.length);
+			await writer.write(data);
+		},
+		onHandshake() {
+			debug?.timeEnd('tls.handshake');
+			log('TLS handshake completed');
+			s.tlsWrite = (data: Uint8Array) => tls.write(data);
+			s.resolveHandshake?.();
+		},
+		onApplicationData(plaintext) {
+			if (s.resolveAppData) { s.resolveAppData(); s.resolveAppData = null; }
+			s.chunks.push(plaintext);
+		},
 		onTlsEnd(error) {
 			log(`TLS ended: ${error || 'ok'}`);
 			s.tlsEnded = true;
 			closed = true;
-			if (error) { s.tlsError = new TlsSessionError(`TLS session error: ${error}`); reject(s.tlsError); }
+			if (error) { s.tlsError = new TlsSessionError(`TLS session error: ${error}`); s.rejectHandshake?.(s.tlsError); }
 			if (s.resolveAppData) { s.resolveAppData(); s.resolveAppData = null; }
 		},
-		});
-		pumpSocket(socket, tls, leftover);
-		tls.startHandshake();
 	});
+	pumpSocket(socket, tls, leftover);
+	await tls.startHandshake();
 
 	const close = () => {
 		if (closed) return;
 		closed = true;
-		try { writer.releaseLock(); } catch { /* ignore */ }
+		s.tlsEnded = true;
+		s.resolveHandshake?.();
 		try { socket.close(); } catch { /* ignore */ }
+		try { writer.releaseLock(); } catch { /* ignore */ }
 	};
 
 	return {

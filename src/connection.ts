@@ -68,8 +68,8 @@ function wrapRaw(socket: Socket, target: ProxyTarget): ProxyConnection {
 		close() {
 			if (closed) return;
 			closed = true;
-			try { writer.releaseLock(); } catch { /* ignore */ }
 			try { socket.close(); } catch { /* ignore */ }
+			try { writer.releaseLock(); } catch { /* ignore */ }
 		},
 	};
 }

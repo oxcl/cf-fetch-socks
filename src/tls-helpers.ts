@@ -6,6 +6,8 @@ export interface TlsState {
 	tlsWrite: ((data: Uint8Array) => Promise<void>) | null;
 	tlsEnded: boolean;
 	tlsError: Error | null;
+	resolveHandshake?: () => void;
+	rejectHandshake?: (err: Error) => void;
 }
 
 export function pumpSocket(socket: Socket, tls: { handleReceivedBytes(b: Uint8Array): void }, leftover: Uint8Array): void {
