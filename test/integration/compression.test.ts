@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { fetch } from '../../src/fetch';
+import { socksFetch } from '../../src/fetch';
 import { getProxy, closeProxy, HTTPBIN_BASE } from './helpers';
 import type { Proxy } from '../../src/proxy';
 
@@ -15,7 +15,7 @@ describe('compression', () => {
 	});
 
 	it('decompresses gzip response', async () => {
-		const res = await fetch(`${HTTPBIN_BASE}/gzip`, { proxy });
+		const res = await socksFetch(`${HTTPBIN_BASE}/gzip`, { proxy });
 		expect(res.status).toBe(200);
 
 		const body = await res.json();
@@ -24,7 +24,7 @@ describe('compression', () => {
 	});
 
 	it('handles uncompressed response', async () => {
-		const res = await fetch(`${HTTPBIN_BASE}/get`, { proxy });
+		const res = await socksFetch(`${HTTPBIN_BASE}/get`, { proxy });
 		expect(res.status).toBe(200);
 
 		const body = await res.json();

@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { fetch } from '../../src/fetch';
+import { socksFetch } from '../../src/fetch';
 import { getProxy, closeProxy, HTTPBIN_BASE } from './helpers';
 import type { Proxy } from '../../src/proxy';
 
@@ -16,7 +16,7 @@ describe('basic requests', () => {
 	});
 
 	it('GET /get echoes query parameters', async () => {
-		const res = await fetch(`${HTTPBIN_BASE}/get?foo=bar&baz=123`, { proxy });
+		const res = await socksFetch(`${HTTPBIN_BASE}/get?foo=bar&baz=123`, { proxy });
 		expect(res.status).toBe(200);
 
 		const body = await res.json();
@@ -24,7 +24,7 @@ describe('basic requests', () => {
 	});
 
 	it('GET /ip returns proxy exit IP', async () => {
-		const res = await fetch(`${HTTPBIN_BASE}/ip`, { proxy });
+		const res = await socksFetch(`${HTTPBIN_BASE}/ip`, { proxy });
 		expect(res.status).toBe(200);
 
 		const body = await res.json();
@@ -35,7 +35,7 @@ describe('basic requests', () => {
 	it('POST /post echoes request body', async () => {
 		const payload = { message: 'hello', data: [1, 2, 3] };
 
-		const res = await fetch(`${HTTPBIN_BASE}/post`, {
+		const res = await socksFetch(`${HTTPBIN_BASE}/post`, {
 			proxy,
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -50,7 +50,7 @@ describe('basic requests', () => {
 	it('PUT /put echoes request body', async () => {
 		const payload = { updated: true };
 
-		const res = await fetch(`${HTTPBIN_BASE}/put`, {
+		const res = await socksFetch(`${HTTPBIN_BASE}/put`, {
 			proxy,
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
@@ -63,7 +63,7 @@ describe('basic requests', () => {
 	});
 
 	it('DELETE /delete succeeds', async () => {
-		const res = await fetch(`${HTTPBIN_BASE}/delete`, {
+		const res = await socksFetch(`${HTTPBIN_BASE}/delete`, {
 			proxy,
 			method: 'DELETE',
 		});
@@ -76,7 +76,7 @@ describe('basic requests', () => {
 	it('PATCH /patch echoes request body', async () => {
 		const payload = { patch: true };
 
-		const res = await fetch(`${HTTPBIN_BASE}/patch`, {
+		const res = await socksFetch(`${HTTPBIN_BASE}/patch`, {
 			proxy,
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
@@ -89,7 +89,7 @@ describe('basic requests', () => {
 	});
 
 	it('forwards custom headers', async () => {
-		const res = await fetch(`${HTTPBIN_BASE}/headers`, {
+		const res = await socksFetch(`${HTTPBIN_BASE}/headers`, {
 			proxy,
 			headers: {
 				'X-Custom-Header': 'test-value',
@@ -106,7 +106,7 @@ describe('basic requests', () => {
 	it('accepts proxy as URI string', async () => {
 		const proxyUri = `socks5://${env.SOCKS5_PROXY_USERNAME}:${env.SOCKS5_PROXY_PASSWORD}@${env.SOCKS5_PROXY_HOSTNAME}:${env.SOCKS5_PROXY_PORT}`;
 
-		const res = await fetch(`${HTTPBIN_BASE}/ip`, { proxy: proxyUri });
+		const res = await socksFetch(`${HTTPBIN_BASE}/ip`, { proxy: proxyUri });
 		expect(res.status).toBe(200);
 
 		const body = await res.json();

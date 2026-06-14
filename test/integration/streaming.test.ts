@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { fetch } from '../../src/fetch';
+import { socksFetch } from '../../src/fetch';
 import { getProxy, closeProxy, HTTPBIN_BASE } from './helpers';
 import type { Proxy } from '../../src/proxy';
 
@@ -15,7 +15,7 @@ describe('streaming', () => {
 	});
 
 	it('streams multiple JSON responses', async () => {
-		const res = await fetch(`${HTTPBIN_BASE}/stream/3`, { proxy });
+		const res = await socksFetch(`${HTTPBIN_BASE}/stream/3`, { proxy });
 		expect(res.status).toBe(200);
 
 		const text = await res.text();
@@ -29,7 +29,7 @@ describe('streaming', () => {
 	});
 
 	it('streams random bytes', async () => {
-		const res = await fetch(`${HTTPBIN_BASE}/stream-bytes/1024`, { proxy });
+		const res = await socksFetch(`${HTTPBIN_BASE}/stream-bytes/1024`, { proxy });
 		expect(res.status).toBe(200);
 		expect(res.headers.get('content-type')).toBe('application/octet-stream');
 
@@ -38,7 +38,7 @@ describe('streaming', () => {
 	});
 
 	it('returns fixed number of bytes', async () => {
-		const res = await fetch(`${HTTPBIN_BASE}/bytes/256`, { proxy });
+		const res = await socksFetch(`${HTTPBIN_BASE}/bytes/256`, { proxy });
 		expect(res.status).toBe(200);
 
 		const buffer = await res.arrayBuffer();

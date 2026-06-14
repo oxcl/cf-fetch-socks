@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { fetch } from '../../src/fetch';
+import { socksFetch } from '../../src/fetch';
 import { getProxy, closeProxy, HTTPBIN_BASE } from './helpers';
 import type { Proxy } from '../../src/proxy';
 
@@ -15,7 +15,7 @@ describe('redirects', () => {
 	});
 
 	it('follows single 302 redirect', async () => {
-		const res = await fetch(`${HTTPBIN_BASE}/redirect/1`, { proxy });
+		const res = await socksFetch(`${HTTPBIN_BASE}/redirect/1`, { proxy });
 		expect(res.status).toBe(200);
 
 		const body = await res.json();
@@ -23,7 +23,7 @@ describe('redirects', () => {
 	});
 
 	it('follows multiple redirects', async () => {
-		const res = await fetch(`${HTTPBIN_BASE}/redirect/3`, { proxy });
+		const res = await socksFetch(`${HTTPBIN_BASE}/redirect/3`, { proxy });
 		expect(res.status).toBe(200);
 
 		const body = await res.json();
@@ -32,7 +32,7 @@ describe('redirects', () => {
 
 	it('follows absolute redirect', async () => {
 		const target = encodeURIComponent(`${HTTPBIN_BASE}/get`);
-		const res = await fetch(`${HTTPBIN_BASE}/redirect-to?url=${target}`, { proxy });
+		const res = await socksFetch(`${HTTPBIN_BASE}/redirect-to?url=${target}`, { proxy });
 		expect(res.status).toBe(200);
 
 		const body = await res.json();
@@ -41,7 +41,7 @@ describe('redirects', () => {
 
 	it('follows 301 redirect', async () => {
 		const target = encodeURIComponent(`${HTTPBIN_BASE}/get`);
-		const res = await fetch(`${HTTPBIN_BASE}/redirect-to?url=${target}&status_code=301`, {
+		const res = await socksFetch(`${HTTPBIN_BASE}/redirect-to?url=${target}&status_code=301`, {
 			proxy,
 		});
 		expect(res.status).toBe(200);
@@ -49,7 +49,7 @@ describe('redirects', () => {
 
 	it('follows 307 redirect', async () => {
 		const target = encodeURIComponent(`${HTTPBIN_BASE}/get`);
-		const res = await fetch(`${HTTPBIN_BASE}/redirect-to?url=${target}&status_code=307`, {
+		const res = await socksFetch(`${HTTPBIN_BASE}/redirect-to?url=${target}&status_code=307`, {
 			proxy,
 		});
 		expect(res.status).toBe(200);
@@ -57,14 +57,14 @@ describe('redirects', () => {
 
 	it('follows 308 redirect', async () => {
 		const target = encodeURIComponent(`${HTTPBIN_BASE}/get`);
-		const res = await fetch(`${HTTPBIN_BASE}/redirect-to?url=${target}&status_code=308`, {
+		const res = await socksFetch(`${HTTPBIN_BASE}/redirect-to?url=${target}&status_code=308`, {
 			proxy,
 		});
 		expect(res.status).toBe(200);
 	});
 
 	it('returns 499 when max redirects exceeded', async () => {
-		const res = await fetch(`${HTTPBIN_BASE}/redirect/10`, {
+		const res = await socksFetch(`${HTTPBIN_BASE}/redirect/10`, {
 			proxy,
 			maxRedirects: 3,
 		});
@@ -73,7 +73,7 @@ describe('redirects', () => {
 
 	it('preserves method through redirects', async () => {
 		const target = encodeURIComponent(`${HTTPBIN_BASE}/get`);
-		const res = await fetch(`${HTTPBIN_BASE}/redirect-to?url=${target}`, {
+		const res = await socksFetch(`${HTTPBIN_BASE}/redirect-to?url=${target}`, {
 			proxy,
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
