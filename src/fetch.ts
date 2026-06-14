@@ -214,7 +214,7 @@ export async function socksFetch(url: string | URL, options?: ProxyFetchOptions)
 	let body = options?.body;
 
 	try {
-		while (true) {
+		for (let i = 0; i < 20; i++) {
 			const conn = await openConnection(currentUrl, socksProxy);
 			const requestBytes = buildRequest(currentUrl, method, headers, body);
 			await conn.write(requestBytes);
