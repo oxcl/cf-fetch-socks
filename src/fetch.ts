@@ -236,7 +236,7 @@ function checkProxyError(status: number, bodyText: string): void {
 	}
 }
 
-export async function fetch(
+export async function socksFetch(
 	url: string | URL,
 	options?: ProxyFetchOptions,
 ): Promise<Response> {
