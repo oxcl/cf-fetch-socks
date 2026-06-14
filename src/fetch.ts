@@ -1,7 +1,7 @@
 import { Proxy } from './proxy';
 import { buildRequest } from './http/request';
 import { readHeaders } from './http/response';
-import { createGunzipStream, drainReader, pipeReaderToWriter } from './http/stream';
+import { createGunzipStream, pipeReaderToWriter } from './http/stream';
 import { checkProxyError } from './errors';
 import type { ProxyConnection } from './connection';
 import { MAX_REDIRECT, REDIRECT_STATUSES } from './constants';
@@ -43,17 +43,16 @@ function streamResponse(
 	headers: Headers,
 	isGzip: boolean,
 ): Response {
-	if (isGzip) {
-		headers.delete('Content-Encoding');
-		headers.delete('Content-Length');
-		return new Response(
-			createGunzipStream(conn.readable, initialBytes, () => conn.close()),
-			{ status, statusText, headers },
-		);
-	}
 	const cl = headers.get('Content-Length');
 	const contentLength = cl ? Number(cl) : undefined;
 	if (contentLength !== undefined) headers.delete('Content-Length');
+	if (isGzip) {
+		headers.delete('Content-Encoding');
+		return new Response(
+			createGunzipStream(reader, initialBytes, contentLength, () => conn.close()),
+			{ status, statusText, headers },
+		);
+	}
 	const { readable, writable } = new TransformStream();
 	pipeReaderToWriter(reader, writable.getWriter(), initialBytes, () => conn.close(), contentLength);
 	return new Response(readable, { status, statusText, headers });
@@ -113,8 +112,8 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 				return streamResponse(conn, reader, initialBytes, status, statusText, rh, ce === 'gzip');
 			}
 
-			await drainReader(reader);
-			free();
+			conn.close();
+			freed = true;
 			const location = rh.get('Location');
 			if (!location) {
 				debug?.log('Redirect without Location header');

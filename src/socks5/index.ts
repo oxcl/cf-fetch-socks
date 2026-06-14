@@ -64,10 +64,21 @@ export const socks5Tunnel: TunnelFn = async (target, creds, connectFn, log, sign
 		}
 
 		const addressType = getAddressType(target.host);
-		debug?.time('socks5.connect');
-		await sendConnectRequest(writer, target.host, target.port, addressType);
-		const { leftover } = await readConnectReply(reader);
-		debug?.timeEnd('socks5.connect');
+		const connectSignal = signal ?? AbortSignal.timeout(10_000);
+		const onAbort = () => {
+			try { socket.close(); } catch { /* ignore */ }
+		};
+		connectSignal.addEventListener('abort', onAbort);
+		let leftover: Uint8Array;
+		try {
+			debug?.time('socks5.connect');
+			await sendConnectRequest(writer, target.host, target.port, addressType);
+			const reply = await readConnectReply(reader, connectSignal);
+			leftover = reply.leftover;
+			debug?.timeEnd('socks5.connect');
+		} finally {
+			connectSignal.removeEventListener('abort', onAbort);
+		}
 		log('socks connection opened');
 
 		socketOwned = true;

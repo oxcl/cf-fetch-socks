@@ -1,4 +1,4 @@
-import { Socks5ProtocolError, Socks5ServerError } from '../errors';
+import { ConnectionTimeoutError, Socks5ProtocolError, Socks5ServerError } from '../errors';
 import type { AddressType } from './address';
 import { encodeAddress } from './address';
 
@@ -15,9 +15,19 @@ export async function sendConnectRequest(
 
 export async function readConnectReply(
 	reader: ReadableStreamDefaultReader<Uint8Array>,
+	signal?: AbortSignal,
 ): Promise<{ leftover: Uint8Array }> {
-	const result = await reader.read();
-	if (result.done) throw new Socks5ProtocolError('Server closed during connect reply');
+	let result: ReadableStreamReadResult<Uint8Array>;
+	try {
+		result = await reader.read();
+	} catch (err) {
+		if (signal?.aborted) throw new ConnectionTimeoutError('SOCKS5 connect timed out');
+		throw err;
+	}
+	if (result.done) {
+		if (signal?.aborted) throw new ConnectionTimeoutError('SOCKS5 connect timed out');
+		throw new Socks5ProtocolError('Server closed during connect reply');
+	}
 
 	const first = result.value;
 	if (first[1] !== 0x00) throw new Socks5ServerError(`SOCKS5 error code: ${first[1]}`);
@@ -30,7 +40,7 @@ export async function readConnectReply(
 		return { leftover: first.slice(4 + payloadSize) };
 	}
 
-	return readRemainingReply(reader, payloadSize - alreadyRead);
+	return readRemainingReply(reader, payloadSize - alreadyRead, signal);
 }
 
 function replyPayloadSize(atyp: number, firstChunk: Uint8Array): number {
@@ -45,13 +55,24 @@ function replyPayloadSize(atyp: number, firstChunk: Uint8Array): number {
 async function readRemainingReply(
 	reader: ReadableStreamDefaultReader<Uint8Array>,
 	needed: number,
+	signal?: AbortSignal,
 ): Promise<{ leftover: Uint8Array }> {
 	const chunks: Uint8Array[] = [];
 	let totalRead = 0;
 
 	while (totalRead < needed) {
-		const { value, done } = await reader.read();
-		if (done) throw new Socks5ProtocolError('Server closed while reading reply');
+		let chunk: ReadableStreamReadResult<Uint8Array>;
+		try {
+			chunk = await reader.read();
+		} catch (err) {
+			if (signal?.aborted) throw new ConnectionTimeoutError('SOCKS5 connect timed out');
+			throw err;
+		}
+		if (chunk.done) {
+			if (signal?.aborted) throw new ConnectionTimeoutError('SOCKS5 connect timed out');
+			throw new Socks5ProtocolError('Server closed while reading reply');
+		}
+		const { value } = chunk;
 		chunks.push(value);
 		totalRead += value.length;
 	}

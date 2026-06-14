@@ -48,12 +48,13 @@ export async function wrapTls(
 				if (s.resolveAppData) { s.resolveAppData(); s.resolveAppData = null; }
 				s.chunks.push(plaintext);
 			},
-			onTlsEnd(error) {
-				log(`TLS ended: ${error || 'ok'}`);
-				s.tlsEnded = true;
-				if (error) { s.tlsError = new TlsSessionError(`TLS session error: ${error}`); reject(s.tlsError); }
-				if (s.resolveAppData) { s.resolveAppData(); s.resolveAppData = null; }
-			},
+		onTlsEnd(error) {
+			log(`TLS ended: ${error || 'ok'}`);
+			s.tlsEnded = true;
+			closed = true;
+			if (error) { s.tlsError = new TlsSessionError(`TLS session error: ${error}`); reject(s.tlsError); }
+			if (s.resolveAppData) { s.resolveAppData(); s.resolveAppData = null; }
+		},
 		});
 		pumpSocket(socket, tls, leftover);
 		tls.startHandshake();
@@ -71,6 +72,7 @@ export async function wrapTls(
 		get closed() { return closed; },
 		async write(data: Uint8Array) {
 			if (closed) throw new Error('Connection closed');
+			if (s.tlsEnded) throw new Error('TLS session ended');
 			await handshakeDone;
 			if (!s.tlsWrite) throw new Error('TLS not ready');
 			await s.tlsWrite(data);
