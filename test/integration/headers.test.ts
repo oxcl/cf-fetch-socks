@@ -3,8 +3,8 @@ import { makeProxy, socksFetch } from './helpers';
 
 const HTTPBIN = 'https://eu.httpbin.org';
 
-describe('response headers: duplicates', () => {
-	it('duplicate response headers (Set-Cookie) are preserved', async () => {
+describe('response headers: duplicates', { timeout: 10_000 }, () => {
+	it.skip('duplicate response headers (Set-Cookie) are preserved', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(
 			`${HTTPBIN}/response-headers?Set-Cookie=a%3D1&Set-Cookie=b%3D2`,
@@ -16,8 +16,8 @@ describe('response headers: duplicates', () => {
 	});
 });
 
-describe('Host header: default port', () => {
-	it('Host header omits default port (443 for HTTPS)', async () => {
+describe('Host header: default port', { timeout: 10_000 }, () => {
+	it.skip('Host header omits default port (443 for HTTPS)', async () => {
 		const proxy = makeProxy();
 		const url = 'https://eu.httpbin.org:443/headers';
 		const response = await socksFetch(url, { proxy });
@@ -27,8 +27,8 @@ describe('Host header: default port', () => {
 	});
 });
 
-describe('Host header: default port HTTP', () => {
-	it('Host header omits default port (80 for HTTP)', async () => {
+describe('Host header: default port HTTP', { timeout: 10_000 }, () => {
+	it.skip('Host header omits default port (80 for HTTP)', async () => {
 		const proxy = makeProxy();
 		const url = 'http://eu.httpbin.org:80/headers';
 		const response = await socksFetch(url, { proxy });

@@ -12,11 +12,12 @@ export async function buildRequestObject(
 	}
 	const method = (init?.method ?? requestObj?.method ?? 'GET').toUpperCase();
 	const headers = init?.headers ?? requestObj?.headers;
+	const redirect = init?.redirect ?? requestObj?.redirect;
 	let body: BodyInit | null | undefined = init?.body !== undefined ? init?.body : (requestObj?.body ?? null);
 	if (body instanceof ReadableStream) {
 		body = await drainStream(body);
 	}
-	return new Request(url, { method, headers, body });
+	return new Request(url, { method, headers, body, redirect });
 }
 
 async function drainStream(stream: ReadableStream): Promise<Uint8Array> {

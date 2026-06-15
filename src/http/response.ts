@@ -82,12 +82,20 @@ export function streamResponse(
 export function buildFinalResponse(
 	conn: ProxyConnection,
 	result: { reader: ReadableStreamDefaultReader<Uint8Array>; status: number; statusText: string; headers: Headers; initialBytes: Uint8Array },
+	redirected = false,
 ): Response {
 	debug.log(`Response: ${result.status}, content-length: ${result.headers.get('Content-Length') ?? 'chunked'}, encoding: ${result.headers.get('Content-Encoding') ?? 'none'}`);
 	debug.timeEnd('total');
 	printWaterfall();
 	const ce = result.headers.get('Content-Encoding');
-	return streamResponse(conn, result.reader, result.initialBytes, result.status, result.statusText, result.headers, ce);
+	return withRedirected(streamResponse(conn, result.reader, result.initialBytes, result.status, result.statusText, result.headers, ce), redirected);
+}
+
+function withRedirected(response: Response, redirected: boolean): Response {
+	if (redirected) {
+		return Object.defineProperty(response, 'redirected', { value: true, configurable: true, writable: false });
+	}
+	return response;
 }
 
 export function buildRedirectWithoutLocationResponse(

@@ -24,6 +24,8 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 	let activeConn: ProxyConnection | null = null;
 	let activeReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 	let bodyBytes: Uint8Array | undefined;
+	let redirected = false;
+	const redirectMode = request.redirect || 'follow';
 	for (let i = 0; i < MAX_REDIRECT; i++) {
 		if (signal?.aborted) {
 			throw new DOMException('The operation was aborted', 'AbortError');
@@ -70,8 +72,28 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 				activeReader = null;
 				const conn = activeConn!;
 				activeConn = null;
-				return buildFinalResponse(conn, result);
+				return buildFinalResponse(conn, result, redirected);
 			}
+
+			if (redirectMode === 'manual') {
+				activeReader.releaseLock();
+				activeReader = null;
+				const conn = activeConn!;
+				activeConn = null;
+				proxy.release(conn);
+				return new Response(result.initialBytes, { status: result.status, statusText: result.statusText, headers: result.headers });
+			}
+
+			if (redirectMode === 'error') {
+				activeReader.releaseLock();
+				if (!freed && activeConn) {
+					activeConn.close();
+					activeConn = null;
+				}
+				throw new TypeError('URI requested responds with a redirect');
+			}
+
+			redirected = true;
 
 			const cl = result.headers.get('Content-Length');
 			if (cl) await drainResponseBody(result.reader, Number(cl), result.initialBytes);
@@ -82,7 +104,12 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 			const next = result.status !== 307 && result.status !== 308 ? 'GET' : method;
 			const body = result.status !== 307 && result.status !== 308 ? undefined : bodyBytes;
 			if (result.status !== 307 && result.status !== 308) bodyBytes = undefined;
-			request = new Request(new URL(location, request.url), { method: next, headers: request.headers, body });
+			const nextUrl = new URL(location, request.url);
+			const nextHeaders = new Headers(request.headers);
+			if (nextUrl.origin !== new URL(request.url).origin) {
+				nextHeaders.delete('Authorization');
+			}
+			request = new Request(nextUrl, { method: next, headers: nextHeaders, body });
 		} catch (e) {
 			debug.log(`Error: ${e instanceof Error ? e.message : String(e)}`);
 			if (activeReader) activeReader.releaseLock();

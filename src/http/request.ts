@@ -35,9 +35,6 @@ export function buildRequest(
 		if (!extraHeaders.has('Content-Length')) {
 			extraHeaders.set('Content-Length', String(bodyBytes.length));
 		}
-		if (!extraHeaders.has('Content-Type')) {
-			extraHeaders.set('Content-Type', 'application/x-www-form-urlencoded');
-		}
 	}
 
 	for (const [key, value] of extraHeaders) {
