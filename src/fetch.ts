@@ -8,15 +8,27 @@ import { MAX_REDIRECT, REDIRECT_STATUSES } from './constants';
 import { createDebugger } from './debug';
 import type { DebugContext } from './debug';
 
-export interface ProxyFetchOptions extends RequestInit {
-	proxy: string | Proxy;
-	debug?: boolean;
+export interface DebugOptions {
+	enable: boolean;
 	logFn?: (msg: string) => void;
 	onLine?: (line: string) => void;
 	onDebugEnd?: (entries: Array<{ label: string; duration: number }>) => void;
 }
 
-async function performRequest(conn: ProxyConnection, url: URL, method: string, headers?: HeadersInit, body?: BodyInit | null, debug?: DebugContext, reader?: ReadableStreamDefaultReader<Uint8Array>) {
+export interface ProxyFetchOptions extends RequestInit {
+	proxy: string | Proxy;
+	debug?: boolean | DebugOptions;
+}
+
+async function performRequest(
+	conn: ProxyConnection,
+	url: URL,
+	method: string,
+	headers?: HeadersInit,
+	body?: BodyInit | null,
+	debug?: DebugContext,
+	reader?: ReadableStreamDefaultReader<Uint8Array>,
+) {
 	const reqBytes = buildRequest(url, method, headers, body);
 	debug?.dump(reqBytes, 'http.request');
 
@@ -66,7 +78,7 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 	const proxy = proxyStr ? Proxy.acquireProxy(proxyStr) : (options.proxy as Proxy);
 	const release = (conn: ProxyConnection) => {
 		debug?.log(`Releasing connection to ${conn.target.host}:${conn.target.port}`);
-		proxyStr ? proxy.closeConnection(conn) : (proxy as Proxy).revokeConnection(conn);
+		proxyStr ? proxy.closeConnection(conn) : proxy.revokeConnection(conn);
 	};
 	let url = new URL(urlOrString);
 	let method = (options.method ?? 'GET').toUpperCase();
@@ -90,7 +102,10 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 		if (!activeConn || activeConn.closed || activeKey !== targetKey) {
 			if (activeConn && !activeConn.closed) {
 				activeConn.close();
-				if (activeReader) { activeReader.releaseLock(); activeReader = null; }
+				if (activeReader) {
+					activeReader.releaseLock();
+					activeReader = null;
+				}
 			}
 			activeConn = proxyStr
 				? await proxy.createConnection(conOpts, undefined, debug)
@@ -111,7 +126,13 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 		};
 
 		try {
-			const { reader, status, statusText, headers: rh, initialBytes } = await performRequest(activeConn, url, method, headers, body, debug, activeReader);
+			const {
+				reader,
+				status,
+				statusText,
+				headers: rh,
+				initialBytes,
+			} = await performRequest(activeConn, url, method, headers, body, debug, activeReader);
 			activeReader = reader;
 
 			if (!REDIRECT_STATUSES.has(status)) {
@@ -124,7 +145,7 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 				options.onDebugEnd?.(entries);
 				if (entries.length > 0) {
 					debug?.log('── waterfall ──');
-					const maxLabel = Math.max(...entries.map(e => e.label.length), 5);
+					const maxLabel = Math.max(...entries.map((e) => e.label.length), 5);
 					for (const e of entries) {
 						debug?.log(` ${e.label.padEnd(maxLabel)} ${e.duration.toFixed(1)}ms`);
 					}
@@ -160,8 +181,14 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 			}
 		} catch (e) {
 			debug?.log(`Error: ${e instanceof Error ? e.message : String(e)}`);
-			if (activeReader) { activeReader.releaseLock(); activeReader = null; }
-			if (!freed && activeConn) { activeConn.close(); activeConn = null; }
+			if (activeReader) {
+				activeReader.releaseLock();
+				activeReader = null;
+			}
+			if (!freed && activeConn) {
+				activeConn.close();
+				activeConn = null;
+			}
 			throw e;
 		}
 	}
