@@ -3,12 +3,13 @@ import { env } from 'cloudflare:test';
 import { Proxy, socks5Tunnel } from '../../src';
 import { AbortError, Socks5AuthError, Socks5ProtocolError, TunnelError } from '../../src/errors';
 
-function makeProxy() {
+function makeProxy(connectTimeout?: number) {
 	return new Proxy(socks5Tunnel, {
 		hostname: env.SOCKS5_PROXY_HOSTNAME,
 		port: Number(env.SOCKS5_PROXY_PORT),
 		username: env.SOCKS5_PROXY_USERNAME,
 		password: env.SOCKS5_PROXY_PASSWORD,
+		timeout: connectTimeout,
 	});
 }
 
@@ -24,7 +25,7 @@ describe('abort', () => {
 
 describe('unreachable target', () => {
 	it('throws a TunnelError when connecting to an unreachable target', async () => {
-		const proxy = makeProxy();
+		const proxy = makeProxy(500);
 		await expect(proxy.acquire({ host: '1.2.3.4', port: 1, tls: false })).rejects.toThrow(TunnelError);
 	});
 });
