@@ -1,4 +1,4 @@
-import type { LogFn } from './socket';
+export type LogFn = (msg: string) => void;
 
 export interface DebugOptions {
 	enable: boolean;
@@ -22,7 +22,7 @@ export interface DebugContext {
 	end(): void;
 }
 
-export function createDebugger(
+function createDebugger(
 	debugOpt?: boolean | DebugOptions,
 ): DebugContext | undefined {
 	const enable = debugOpt === true || (typeof debugOpt === 'object' && debugOpt.enable);
@@ -82,33 +82,35 @@ export function createDebugger(
 	};
 }
 
-let _debug: DebugContext | undefined;
+class Debug {
+	private _ctx: DebugContext | undefined;
 
-export const debug: DebugContext = {
-	log(msg: string) { _debug?.log(msg); },
-	time(label: string) { _debug?.time(label); },
-	timeEnd(label: string) { _debug?.timeEnd(label); },
-	dump(bytes: Uint8Array, label: string) { _debug?.dump(bytes, label); },
-	getLogFn(): LogFn { return _debug?.getLogFn() ?? (() => {}); },
-	getEntries(): DebugEntry[] { return _debug?.getEntries() ?? []; },
-	end() { _debug?.end(); },
-};
+	setContext(opt?: boolean | DebugOptions): void {
+		this._ctx = createDebugger(opt);
+	}
 
-export function setDebugContext(opt?: boolean | DebugOptions): void {
-	_debug = createDebugger(opt);
-}
+	clearContext(): void {
+		this._ctx = undefined;
+	}
 
-export function clearDebugContext(): void {
-	_debug = undefined;
-}
+	log(msg: string) { this._ctx?.log(msg); }
+	time(label: string) { this._ctx?.time(label); }
+	timeEnd(label: string) { this._ctx?.timeEnd(label); }
+	dump(bytes: Uint8Array, label: string) { this._ctx?.dump(bytes, label); }
+	getLogFn(): LogFn { return this._ctx?.getLogFn() ?? (() => {}); }
+	getEntries(): DebugEntry[] { return this._ctx?.getEntries() ?? []; }
+	end() { this._ctx?.end(); }
 
-export function printWaterfall(): void {
-	const entries = debug.getEntries();
-	if (entries.length === 0) return;
-	debug.end();
-	debug.log('── waterfall ──');
-	const maxLabel = Math.max(...entries.map((e) => e.label.length), 5);
-	for (const e of entries) {
-		debug.log(` ${e.label.padEnd(maxLabel)} ${e.duration.toFixed(1)}ms`);
+	printWaterfall(): void {
+		const entries = this.getEntries();
+		if (entries.length === 0) return;
+		this.end();
+		this.log('── waterfall ──');
+		const maxLabel = Math.max(...entries.map((e) => e.label.length), 5);
+		for (const e of entries) {
+			this.log(` ${e.label.padEnd(maxLabel)} ${e.duration.toFixed(1)}ms`);
+		}
 	}
 }
+
+export const debug = new Debug();
