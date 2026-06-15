@@ -76,12 +76,10 @@ describe('redirect following', { timeout: 1_000 }, () => {
 });
 
 describe('max redirects', { timeout: 1_000 }, () => {
-	it('returns 499 after exceeding 20 redirects', async () => {
+	it('throws TypeError after exceeding 20 redirects', async () => {
 		const proxy = makeProxy();
-		const response = await socksFetch(`${HTTPBIN}/redirect/21`, { proxy });
-		expect(response.status).toBe(499);
-		const text = await response.text();
-		expect(text).toBe('Too many redirects');
+		const req = socksFetch(`${HTTPBIN}/redirect/21`, { proxy });
+		await expect(req).rejects.toThrow(TypeError);
 	});
 });
 

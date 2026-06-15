@@ -1,4 +1,4 @@
-import { ConnectionTimeoutError, Socks5ProtocolError, Socks5ServerError } from '../errors';
+import { ConnectionRefusedError, ConnectionTimeoutError, Socks5ProtocolError, Socks5ServerError } from '../errors';
 import type { AddressType } from './address';
 import { encodeAddress } from './address';
 
@@ -36,7 +36,10 @@ export async function readConnectReply(
 	}
 
 	const first = result.value;
-	if (first[1] !== 0x00) throw new Socks5ServerError(`SOCKS5 error code: ${first[1]}`);
+	if (first[1] !== 0x00) {
+		if (first[1] === 0x05) throw new ConnectionRefusedError('SOCKS5 connection refused by remote host');
+		throw new Socks5ServerError(`SOCKS5 error code: ${first[1]}`);
+	}
 
 	const atyp = first[3];
 	const payloadSize = replyPayloadSize(atyp, first);

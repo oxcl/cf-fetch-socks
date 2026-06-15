@@ -4,7 +4,7 @@ import { performRequest, drainBodyStream } from './http/request';
 import { buildFinalResponse, buildRedirectWithoutLocationResponse } from './http/response';
 import type { ProxyConnection } from './connection';
 import { MAX_REDIRECT } from './constants';
-import { isRedirect, drainResponseBody, tooManyRedirectsResponse } from './redirect';
+import { isRedirect, drainResponseBody } from './redirect';
 
 function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
 	if (!signal || signal.aborted) return promise;
@@ -132,5 +132,5 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 		debug.log(`Releasing connection to ${activeConn.target.host}:${activeConn.target.port}`);
 		proxy.release(activeConn);
 	}
-	return tooManyRedirectsResponse();
+	throw new TypeError('Too many redirects');
 }
