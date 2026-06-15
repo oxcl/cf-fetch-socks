@@ -9,11 +9,9 @@ export async function socksFetch(url: string | URL, options: Parameters<typeof o
 
 	const response = await originalSocksFetch(url, {
 		...options,
-		debug: true,
-		onLine: (line) => {
+		debug: { enable: true, onLine: (line) => {
 			writer.write(enc.encode(JSON.stringify({ type: 'debug', line }) + '\n'));
-		},
-		onDebugEnd: (e) => { entries = e; },
+		}, onDebugEnd: (e) => { entries = e; } },
 	});
 
 	writer.write(enc.encode(JSON.stringify({ type: 'entries', entries }) + '\n'));

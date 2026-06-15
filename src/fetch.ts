@@ -73,7 +73,12 @@ function streamResponse(
 }
 
 export async function socksFetch(urlOrString: string | URL, options: ProxyFetchOptions): Promise<Response> {
-	const debug = createDebugger(options.debug, options.logFn, options.onLine);
+	const debugOpt = options.debug;
+	const enable = debugOpt === true || (typeof debugOpt === 'object' && debugOpt.enable);
+	const logFn = typeof debugOpt === 'object' ? debugOpt.logFn : undefined;
+	const onLine = typeof debugOpt === 'object' ? debugOpt.onLine : undefined;
+	const onDebugEnd = typeof debugOpt === 'object' ? debugOpt.onDebugEnd : undefined;
+	const debug = createDebugger(enable, logFn, onLine);
 	const proxyStr = typeof options.proxy === 'string' ? options.proxy : null;
 	const proxy = proxyStr ? Proxy.acquireProxy(proxyStr) : (options.proxy as Proxy);
 	const release = (conn: ProxyConnection) => {
@@ -142,7 +147,7 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 
 				debug?.timeEnd('total');
 				const entries = debug?.getEntries() ?? [];
-				options.onDebugEnd?.(entries);
+				onDebugEnd?.(entries);
 				if (entries.length > 0) {
 					debug?.log('── waterfall ──');
 					const maxLabel = Math.max(...entries.map((e) => e.label.length), 5);
@@ -170,7 +175,7 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 			if (!location) {
 				debug?.log('Redirect without Location header');
 				debug?.timeEnd('total');
-				options.onDebugEnd?.(debug?.getEntries() ?? []);
+				onDebugEnd?.(debug?.getEntries() ?? []);
 				free();
 				return new Response(initialBytes, { status, statusText, headers: rh });
 			}
@@ -195,7 +200,7 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 
 	debug?.log('Too many redirects');
 	debug?.timeEnd('total');
-	options.onDebugEnd?.(debug?.getEntries() ?? []);
+	onDebugEnd?.(debug?.getEntries() ?? []);
 	if (activeConn) {
 		if (activeReader) activeReader.releaseLock();
 		release(activeConn);
