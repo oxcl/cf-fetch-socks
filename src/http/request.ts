@@ -1,3 +1,8 @@
+import { readHeaders } from './response';
+import { checkProxyError } from '../errors';
+import type { ProxyConnection } from '../connection';
+import type { DebugContext } from '../debug';
+
 function serializeBody(body: BodyInit | null | undefined): Uint8Array | undefined {
 	if (body == null) return undefined;
 	if (body instanceof Uint8Array) return body;
@@ -48,4 +53,32 @@ export function buildRequest(
 	}
 
 	return headerBytes;
+}
+
+export async function performRequest(
+	conn: ProxyConnection,
+	url: URL,
+	method: string,
+	headers?: HeadersInit,
+	body?: BodyInit | null,
+	debug?: DebugContext,
+	reader?: ReadableStreamDefaultReader<Uint8Array> | null,
+) {
+	const reqBytes = buildRequest(url, method, headers, body);
+	debug?.dump(reqBytes, 'http.request');
+
+	debug?.time('http.send');
+	await conn.write(reqBytes);
+	debug?.timeEnd('http.send');
+
+	if (!reader) {
+		reader = conn.readable.getReader();
+	}
+	debug?.time('http.ttfb');
+	const parsed = await readHeaders(reader);
+	debug?.timeEnd('http.ttfb');
+
+	checkProxyError(parsed.status, new TextDecoder().decode(parsed.initialBytes));
+	debug?.log(`<- ${parsed.status} ${parsed.statusText}`);
+	return { reader, ...parsed };
 }

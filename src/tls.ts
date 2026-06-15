@@ -6,31 +6,19 @@ import type { ProxyTarget, ProxyConnection } from './connection';
 import type { DebugContext } from './debug';
 import { TlsSessionError } from './errors';
 import { pumpSocket, makeTlsReadable, type TlsState } from './tls-helpers';
-
 setCryptoImplementation(webcryptoCrypto);
-
 const CIPHERS: NonNullable<Parameters<typeof makeTLSClient>[0]>['cipherSuites'] = [
-	'TLS_AES_256_GCM_SHA384', 'TLS_AES_128_GCM_SHA256',
-	'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384', 'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
-	'TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384', 'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256',
+	'TLS_AES_256_GCM_SHA384', 'TLS_AES_128_GCM_SHA256', 'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384',
+	'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256', 'TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384', 'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256',
 ];
-
-export async function wrapTls(
-	socket: Socket,
-	leftover: Uint8Array,
+function createTlsClient(
 	target: ProxyTarget,
+	writer: WritableStreamDefaultWriter<Uint8Array>,
+	s: TlsState,
+	debug: DebugContext | undefined,
 	log: LogFn,
-	signal?: AbortSignal,
-	debug?: DebugContext,
-): Promise<ProxyConnection> {
-	let closed = false;
-	const writer = socket.writable.getWriter();
-	const s: TlsState = { chunks: [], resolveAppData: null, tlsWrite: null, tlsEnded: false, tlsError: null };
-
-	debug?.dump(leftover, 'tls.leftover');
-
-	debug?.time('tls.handshake');
-
+	onTlsEnd: (error?: unknown) => void,
+): { tls: ReturnType<typeof makeTLSClient>; handshakeDone: Promise<void> } {
 	const handshakeDone = new Promise<void>((resolve, reject) => {
 		s.resolveHandshake = resolve;
 		s.rejectHandshake = reject;
@@ -56,11 +44,33 @@ export async function wrapTls(
 		onTlsEnd(error) {
 			log(`TLS ended: ${error || 'ok'}`);
 			s.tlsEnded = true;
-			closed = true;
-			if (error) { s.tlsError = new TlsSessionError(`TLS session error: ${error}`); s.rejectHandshake?.(s.tlsError); }
+			if (error) {
+				s.tlsError = new TlsSessionError(`TLS session error: ${error}`);
+				s.rejectHandshake?.(s.tlsError);
+			}
 			if (s.resolveAppData) { s.resolveAppData(); s.resolveAppData = null; }
+			onTlsEnd(error);
 		},
 	});
+
+	return { tls, handshakeDone };
+}
+export async function wrapTls(
+	socket: Socket,
+	leftover: Uint8Array,
+	target: ProxyTarget,
+	log: LogFn,
+	signal?: AbortSignal,
+	debug?: DebugContext,
+): Promise<ProxyConnection> {
+	let closed = false;
+	const writer = socket.writable.getWriter();
+	const s: TlsState = { chunks: [], resolveAppData: null, tlsWrite: null, tlsEnded: false, tlsError: null };
+
+	debug?.dump(leftover, 'tls.leftover');
+	debug?.time('tls.handshake');
+
+	const { tls, handshakeDone } = createTlsClient(target, writer, s, debug, log, () => { closed = true; });
 	pumpSocket(socket, tls, leftover);
 	await tls.startHandshake();
 

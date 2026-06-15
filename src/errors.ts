@@ -30,33 +30,19 @@ export class ProxyError extends Error {
 	}
 }
 
-export class ProxyAuthError extends ProxyError {
-	constructor(message = 'Proxy authentication required') {
-		super(message, 407);
-		this.name = 'ProxyAuthError';
-	}
+function proxyError(name: string, status: number, defaultMsg: string) {
+	return class extends ProxyError {
+		constructor(message = defaultMsg) {
+			super(message, status);
+			this.name = name;
+		}
+	};
 }
 
-export class ProxyForbiddenError extends ProxyError {
-	constructor(message = 'Forbidden by proxy') {
-		super(message, 403);
-		this.name = 'ProxyForbiddenError';
-	}
-}
-
-export class BadGatewayError extends ProxyError {
-	constructor(message = 'Bad gateway') {
-		super(message, 502);
-		this.name = 'BadGatewayError';
-	}
-}
-
-export class GatewayTimeoutError extends ProxyError {
-	constructor(message = 'Gateway timeout') {
-		super(message, 504);
-		this.name = 'GatewayTimeoutError';
-	}
-}
+export const ProxyAuthError = proxyError('ProxyAuthError', 407, 'Proxy authentication required');
+export const ProxyForbiddenError = proxyError('ProxyForbiddenError', 403, 'Forbidden by proxy');
+export const BadGatewayError = proxyError('BadGatewayError', 502, 'Bad gateway');
+export const GatewayTimeoutError = proxyError('GatewayTimeoutError', 504, 'Gateway timeout');
 
 export function checkProxyError(status: number, bodyText: string): void {
 	switch (status) {

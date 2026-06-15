@@ -1,5 +1,12 @@
 import type { LogFn } from './socket';
 
+export interface DebugOptions {
+	enable: boolean;
+	logFn?: (msg: string) => void;
+	onLine?: (line: string) => void;
+	onDebugEnd?: (entries: Array<{ label: string; duration: number }>) => void;
+}
+
 export interface DebugEntry {
 	label: string;
 	duration: number;
@@ -12,14 +19,18 @@ export interface DebugContext {
 	dump(bytes: Uint8Array, label: string): void;
 	getLogFn(): LogFn;
 	getEntries(): DebugEntry[];
+	end(): void;
 }
 
 export function createDebugger(
-	enabled?: boolean,
-	logFn?: (msg: string) => void,
-	onLine?: (line: string) => void,
+	debugOpt?: boolean | DebugOptions,
 ): DebugContext | undefined {
-	if (!enabled) return undefined;
+	const enable = debugOpt === true || (typeof debugOpt === 'object' && debugOpt.enable);
+	const logFn = typeof debugOpt === 'object' ? debugOpt.logFn : undefined;
+	const onLine = typeof debugOpt === 'object' ? debugOpt.onLine : undefined;
+	const onDebugEnd = typeof debugOpt === 'object' ? debugOpt.onDebugEnd : undefined;
+
+	if (!enable) return undefined;
 
 	const id = crypto.randomUUID().slice(0, 8);
 	const prefix = `[DEBUG:${id}]`;
@@ -64,5 +75,21 @@ export function createDebugger(
 		getEntries(): DebugEntry[] {
 			return entries;
 		},
+
+		end() {
+			onDebugEnd?.(entries);
+		},
 	};
+}
+
+export function printWaterfall(debug: DebugContext | undefined): void {
+	if (!debug) return;
+	debug.end();
+	const entries = debug.getEntries();
+	if (entries.length === 0) return;
+	debug.log('── waterfall ──');
+	const maxLabel = Math.max(...entries.map((e) => e.label.length), 5);
+	for (const e of entries) {
+		debug.log(` ${e.label.padEnd(maxLabel)} ${e.duration.toFixed(1)}ms`);
+	}
 }

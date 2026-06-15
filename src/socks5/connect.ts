@@ -2,6 +2,10 @@ import { ConnectionTimeoutError, Socks5ProtocolError, Socks5ServerError } from '
 import type { AddressType } from './address';
 import { encodeAddress } from './address';
 
+function checkTimeout(signal?: AbortSignal, message = 'SOCKS5 connect timed out'): void {
+	if (signal?.aborted) throw new ConnectionTimeoutError(message);
+}
+
 export async function sendConnectRequest(
 	writer: WritableStreamDefaultWriter<Uint8Array>,
 	host: string,
@@ -21,11 +25,11 @@ export async function readConnectReply(
 	try {
 		result = await reader.read();
 	} catch (err) {
-		if (signal?.aborted) throw new ConnectionTimeoutError('SOCKS5 connect timed out');
+		checkTimeout(signal);
 		throw err;
 	}
 	if (result.done) {
-		if (signal?.aborted) throw new ConnectionTimeoutError('SOCKS5 connect timed out');
+		checkTimeout(signal);
 		throw new Socks5ProtocolError('Server closed during connect reply');
 	}
 
@@ -65,11 +69,11 @@ async function readRemainingReply(
 		try {
 			chunk = await reader.read();
 		} catch (err) {
-			if (signal?.aborted) throw new ConnectionTimeoutError('SOCKS5 connect timed out');
+			checkTimeout(signal);
 			throw err;
 		}
 		if (chunk.done) {
-			if (signal?.aborted) throw new ConnectionTimeoutError('SOCKS5 connect timed out');
+			checkTimeout(signal);
 			throw new Socks5ProtocolError('Server closed while reading reply');
 		}
 		const { value } = chunk;
