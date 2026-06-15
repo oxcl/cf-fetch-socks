@@ -126,13 +126,4 @@ function decorateResponse(response: Response, redirected: boolean, url?: string)
 	return response;
 }
 
-export function buildRedirectWithoutLocationResponse(
-	free: () => void,
-	result: { status: number; statusText: string; headers: Headers; initialBytes: Uint8Array },
-): Response {
-	debug.log('Redirect without Location header');
-	debug.timeEnd('total');
-	debug.end();
-	free();
-	return new Response(result.initialBytes, { status: result.status, statusText: result.statusText, headers: result.headers });
-}
+

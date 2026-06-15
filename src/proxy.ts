@@ -5,27 +5,6 @@ import { openConnection, type ProxyConnection, type ProxyTarget, type ProxyCrede
 import { socks5Tunnel } from './socks5/index';
 import { parseProxyUri } from './utils';
 export type ProxyOptions = ProxyCredentials;
-
-export async function ensureConnection(
-	proxy: Proxy,
-	url: URL,
-	activeConn: ProxyConnection | null,
-	activeReader: ReadableStreamDefaultReader<Uint8Array> | null,
-	signal?: AbortSignal,
-): Promise<{ conn: ProxyConnection; reader: ReadableStreamDefaultReader<Uint8Array> | null }> {
-	const isTls = url.protocol === 'https:';
-	const port = url.port ? Number(url.port) : isTls ? 443 : 80;
-	const targetKey = `${url.hostname}:${port}`;
-	const activeKey = activeConn ? `${activeConn.target.host}:${activeConn.target.port}` : null;
-	if (activeConn && !activeConn.closed && activeKey === targetKey) return { conn: activeConn, reader: activeReader };
-	if (activeConn && !activeConn.closed) {
-		activeConn.close();
-		if (activeReader) activeReader.releaseLock();
-	}
-	const conOpts: ProxyTarget = { host: url.hostname, port, tls: isTls };
-	const conn = await proxy.connect(conOpts, signal);
-	return { conn, reader: null };
-}
 export class Proxy {
 	private static cache = new Map<string, Proxy>();
 
