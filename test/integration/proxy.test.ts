@@ -22,7 +22,7 @@ describe('abort', () => {
 	});
 });
 
-describe('unreachable target', { timeout: 30_000 }, () => {
+describe('unreachable target', { timeout: 1_000 }, () => {
 	it.skip('throws a TunnelError when connecting to an unreachable target', async () => {
 		const proxy = makeProxy();
 		await expect(proxy.acquire({ host: '1.2.3.4', port: 1, tls: false })).rejects.toThrow(TunnelError);

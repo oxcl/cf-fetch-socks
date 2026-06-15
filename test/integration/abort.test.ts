@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { makeProxy, socksFetch, HTTPBIN } from './helpers';
 
-describe('abort: timeout', { timeout: 10_000 }, () => {
-	it.skip('AbortSignal.timeout() aborts a slow request', async () => {
+describe('abort: timeout', { timeout: 2_000 }, () => {
+	it('AbortSignal.timeout() aborts a slow request', async () => {
 		const proxy = makeProxy();
 		const req = socksFetch(`${HTTPBIN}/delay/10`, {
 			proxy,
@@ -13,8 +13,8 @@ describe('abort: timeout', { timeout: 10_000 }, () => {
 	});
 });
 
-describe('abort: pre-aborted', { timeout: 3_000 }, () => {
-	it.skip('pre-aborted signal rejects immediately', async () => {
+describe('abort: pre-aborted', { timeout: 1_000 }, () => {
+	it('pre-aborted signal rejects immediately', async () => {
 		const proxy = makeProxy();
 		const controller = new AbortController();
 		controller.abort();
@@ -24,7 +24,7 @@ describe('abort: pre-aborted', { timeout: 3_000 }, () => {
 	});
 });
 
-describe('abort: mid-stream', { timeout: 15_000 }, () => {
+describe('abort: mid-stream', { timeout: 1_000 }, () => {
 	it.skip('aborting mid-stream stops further reads', async () => {
 		const proxy = makeProxy();
 		const controller = new AbortController();

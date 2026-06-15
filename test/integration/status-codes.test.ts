@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeProxy, socksFetch, HTTPBIN } from './helpers';
-describe('status codes with no body', { timeout: 10_000 }, () => {
+describe('status codes with no body', { timeout: 1_000 }, () => {
 	it.skip('204 No Content response has no body', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/status/204`, { proxy });
@@ -18,7 +18,7 @@ describe('status codes with no body', { timeout: 10_000 }, () => {
 	});
 });
 
-describe('HEAD request', { timeout: 10_000 }, () => {
+describe('HEAD request', { timeout: 1_000 }, () => {
 	it.skip('HEAD request returns no body regardless of target content', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/get`, { proxy, method: 'HEAD' });

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { makeProxy, socksFetch, HTTPBIN } from './helpers';
 
-describe('response decoding: gzip', { timeout: 10_000 }, () => {
-	it.skip('gzip response is auto-decoded', async () => {
+describe('response decoding: gzip', { timeout: 1_000 }, () => {
+	it('gzip response is auto-decoded', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/gzip`, { proxy });
 		expect(response.status).toBe(200);
@@ -12,8 +12,8 @@ describe('response decoding: gzip', { timeout: 10_000 }, () => {
 	});
 });
 
-describe('response decoding: brotli', { timeout: 10_000 }, () => {
-	it.skip('brotli response is auto-decoded', async () => {
+describe('response decoding: brotli', { timeout: 1_000 }, () => {
+	it('brotli response is auto-decoded', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/brotli`, { proxy });
 		expect(response.status).toBe(200);
@@ -23,8 +23,8 @@ describe('response decoding: brotli', { timeout: 10_000 }, () => {
 	});
 });
 
-describe('response decoding: deflate', { timeout: 10_000 }, () => {
-	it.skip('deflate response is auto-decoded', async () => {
+describe('response decoding: deflate', { timeout: 1_000 }, () => {
+	it('deflate response is auto-decoded', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/deflate`, { proxy });
 		expect(response.status).toBe(200);
@@ -34,8 +34,8 @@ describe('response decoding: deflate', { timeout: 10_000 }, () => {
 	});
 });
 
-describe('response decoding: chunked', { timeout: 15_000 }, () => {
-	it.skip('chunked transfer-encoding response is reassembled cleanly', async () => {
+describe('response decoding: chunked', { timeout: 5_000 }, () => {
+	it('chunked transfer-encoding response is reassembled cleanly', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/stream/20`, { proxy });
 		expect(response.status).toBe(200);
@@ -49,8 +49,8 @@ describe('response decoding: chunked', { timeout: 15_000 }, () => {
 	});
 });
 
-describe('response decoding: large body', { timeout: 120_000 }, () => {
-	it.skip('large response body streams without buffering everything in memory', async () => {
+describe('response decoding: large body', { timeout: 30_000 }, () => {
+	it('large response body streams without buffering everything in memory', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/stream-bytes/${5_000_000}`, { proxy });
 		expect(response.status).toBe(200);

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeProxy, socksFetch, HTTPBIN } from './helpers';
 
-describe('redirect: response.url and response.redirected', { timeout: 20_000 }, () => {
+describe('redirect: response.url and response.redirected', { timeout: 1_000 }, () => {
 	it.skip('url and redirected after a single redirect', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/redirect-to?url=%2Fget&status_code=302`, { proxy });
@@ -19,7 +19,7 @@ describe('redirect: response.url and response.redirected', { timeout: 20_000 }, 
 	});
 });
 
-describe('redirect: 303 converts POST to GET', { timeout: 15_000 }, () => {
+describe('redirect: 303 converts POST to GET', { timeout: 1_000 }, () => {
 	it.skip('303 redirect converts POST to GET with no body', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/redirect-to?url=%2Fget&status_code=303`, {
@@ -33,7 +33,7 @@ describe('redirect: 303 converts POST to GET', { timeout: 15_000 }, () => {
 	});
 });
 
-describe('redirect: 307 preserves method and body', { timeout: 15_000 }, () => {
+describe('redirect: 307 preserves method and body', { timeout: 1_000 }, () => {
 	it.skip('307 redirect preserves POST method and body', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/redirect-to?url=%2Fpost&status_code=307`, {
@@ -48,7 +48,7 @@ describe('redirect: 307 preserves method and body', { timeout: 15_000 }, () => {
 	});
 });
 
-describe('redirect: manual', { timeout: 10_000 }, () => {
+describe('redirect: manual', { timeout: 1_000 }, () => {
 	it.skip('redirect: "manual" returns the redirect response without following', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/redirect-to?url=%2Fget&status_code=302`, { proxy, redirect: 'manual' });
@@ -57,7 +57,7 @@ describe('redirect: manual', { timeout: 10_000 }, () => {
 	});
 });
 
-describe('redirect: error', { timeout: 10_000 }, () => {
+describe('redirect: error', { timeout: 1_000 }, () => {
 	it.skip('redirect: "error" throws on a redirect', async () => {
 		const proxy = makeProxy();
 		const req = socksFetch(`${HTTPBIN}/redirect-to?url=%2Fget&status_code=302`, { proxy, redirect: 'error' });
@@ -65,7 +65,7 @@ describe('redirect: error', { timeout: 10_000 }, () => {
 	});
 });
 
-describe('redirect: Authorization header stripping', { timeout: 15_000 }, () => {
+describe('redirect: Authorization header stripping', { timeout: 1_000 }, () => {
 	it.skip('Authorization header is stripped on cross-origin redirect', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/redirect-to?url=${encodeURIComponent(`${HTTPBIN}/headers`)}&status_code=302`, {
