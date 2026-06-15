@@ -8,7 +8,6 @@ export type ProxyOptions = ProxyCredentials;
 
 export async function ensureConnection(
 	proxy: Proxy,
-	proxyStr: string | null,
 	url: URL,
 	activeConn: ProxyConnection | null,
 	activeReader: ReadableStreamDefaultReader<Uint8Array> | null,
@@ -19,9 +18,12 @@ export async function ensureConnection(
 	const targetKey = `${url.hostname}:${port}`;
 	const activeKey = activeConn ? `${activeConn.target.host}:${activeConn.target.port}` : null;
 	if (activeConn && !activeConn.closed && activeKey === targetKey) return { conn: activeConn, reader: activeReader };
-	if (activeConn && !activeConn.closed) { activeConn.close(); if (activeReader) activeReader.releaseLock(); }
+	if (activeConn && !activeConn.closed) {
+		activeConn.close();
+		if (activeReader) activeReader.releaseLock();
+	}
 	const conOpts: ProxyTarget = { host: url.hostname, port, tls: isTls };
-	const conn = proxyStr ? await proxy.createConnection(conOpts, undefined, debug) : await proxy.acquireConnection(conOpts, undefined, debug);
+	const conn = await proxy.connect(conOpts, undefined, debug);
 	return { conn, reader: null };
 }
 export class Proxy {
@@ -31,6 +33,7 @@ export class Proxy {
 	private opts: ProxyCredentials;
 	private connectFn: ConnectFn;
 	private log: LogFn;
+	private pooled: boolean;
 	private pool = new Map<string, ProxyConnection[]>();
 	private busy = new WeakSet<ProxyConnection>();
 
@@ -38,31 +41,42 @@ export class Proxy {
 		const existing = Proxy.cache.get(uri);
 		if (existing) return existing;
 		const parsed = parseProxyUri(uri);
-		const proxy = new Proxy(socks5Tunnel, {
-			hostname: parsed.hostname, port: parsed.port, username: parsed.username, password: parsed.password,
-		});
+		const proxy = new Proxy(
+			socks5Tunnel,
+			{
+				hostname: parsed.hostname,
+				port: parsed.port,
+				username: parsed.username,
+				password: parsed.password,
+			},
+			undefined,
+			false,
+		);
 		Proxy.cache.set(uri, proxy);
 		return proxy;
 	}
 
-	constructor(tunnelFn: TunnelFn, opts: ProxyOptions, log: LogFn = console.log) {
+	constructor(tunnelFn: TunnelFn, opts: ProxyOptions, log: LogFn = console.log, pooled = true) {
 		this.tunnelFn = tunnelFn;
 		this.opts = { hostname: opts.hostname, port: opts.port, username: opts.username, password: opts.password };
 		this.connectFn = defaultConnect;
 		this.log = log;
+		this.pooled = pooled;
 	}
 
-	async acquire(target: ProxyTarget, signal?: AbortSignal, debug?: DebugContext): Promise<ProxyConnection> {
+	async connect(target: ProxyTarget, signal?: AbortSignal, debug?: DebugContext): Promise<ProxyConnection> {
+		return this.pooled ? this.acquireConnection(target, signal, debug) : this.acquire(target, signal, debug);
+	}
+
+	release(conn: ProxyConnection): void {
+		this.pooled ? this.revokeConnection(conn) : conn.close();
+	}
+
+	private async acquire(target: ProxyTarget, signal?: AbortSignal, debug?: DebugContext): Promise<ProxyConnection> {
 		this.log(`Opening new connection to ${target.host}:${target.port}`);
 		debug?.log(`Opening new connection to ${target.host}:${target.port}`);
 		return openConnection(this.tunnelFn, this.opts, target, this.connectFn, this.log, signal, debug);
 	}
-
-	async createConnection(target: ProxyTarget, signal?: AbortSignal, debug?: DebugContext): Promise<ProxyConnection> {
-		return this.acquire(target, signal, debug);
-	}
-
-	closeConnection(conn: ProxyConnection): void { conn.close(); }
 
 	async acquireConnection(target: ProxyTarget, signal?: AbortSignal, debug?: DebugContext): Promise<ProxyConnection> {
 		const key = `${target.host}:${target.port}`;

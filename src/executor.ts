@@ -1,4 +1,4 @@
-import { Proxy, ensureConnection } from './proxy';
+import { ensureConnection, type Proxy } from './proxy';
 import { performRequest } from './http/request';
 import { buildFinalResponse, buildRedirectWithoutLocationResponse } from './http/response';
 import type { ProxyConnection } from './connection';
@@ -7,23 +7,23 @@ import { MAX_REDIRECT } from './constants';
 import { isRedirect, drainResponseBody, tooManyRedirectsResponse, redirectMethod } from './redirect';
 
 export async function executeRedirectLoop(
-	proxy: Proxy, proxyStr: string | null, url: URL, method: string,
+	proxy: Proxy, url: URL, method: string,
 	headers: HeadersInit | undefined, body: BodyInit | null | undefined,
 	debug: DebugContext | undefined,
-	release: (conn: ProxyConnection) => void,
 ): Promise<Response> {
 	let activeConn: ProxyConnection | null = null;
 	let activeReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 	for (let i = 0; i < MAX_REDIRECT; i++) {
 		if (i > 0) debug?.log(`Redirect #${i}: ${method} ${url.toString()}`);
-		const mgmt = await ensureConnection(proxy, proxyStr, url, activeConn, activeReader, debug);
+		const mgmt = await ensureConnection(proxy, url, activeConn, activeReader, debug);
 		activeConn = mgmt.conn;
 		activeReader = mgmt.reader;
 		let freed = false;
 		const free = () => {
 			if (freed) return;
 			freed = true;
-			release(activeConn!);
+			debug?.log(`Releasing connection to ${activeConn!.target.host}:${activeConn!.target.port}`);
+			proxy.release(activeConn!);
 			activeConn = null;
 			if (activeReader) { activeReader.releaseLock(); activeReader = null; }
 		};
@@ -59,7 +59,8 @@ export async function executeRedirectLoop(
 	debug?.end();
 	if (activeConn) {
 		if (activeReader) activeReader.releaseLock();
-		release(activeConn);
+		debug?.log(`Releasing connection to ${activeConn.target.host}:${activeConn.target.port}`);
+		proxy.release(activeConn);
 	}
 	return tooManyRedirectsResponse();
 }
