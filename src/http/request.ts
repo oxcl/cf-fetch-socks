@@ -57,14 +57,12 @@ export function buildRequest(
 
 export async function performRequest(
 	conn: ProxyConnection,
-	url: URL,
-	method: string,
-	headers?: HeadersInit,
-	body?: BodyInit | null,
+	request: Request,
 	debug?: DebugContext,
 	reader?: ReadableStreamDefaultReader<Uint8Array> | null,
 ) {
-	const reqBytes = buildRequest(url, method, headers, body);
+	const url = new URL(request.url);
+	const reqBytes = buildRequest(url, request.method, request.headers, request.body);
 	debug?.dump(reqBytes, 'http.request');
 
 	debug?.time('http.send');

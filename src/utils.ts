@@ -5,6 +5,7 @@ export function parseProxyUri(proxy: string) {
 		port: Number(url.port),
 		username: url.username || undefined,
 		password: url.password || undefined,
+		url,
 	};
 }
 

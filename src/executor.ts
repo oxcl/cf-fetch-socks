@@ -4,18 +4,18 @@ import { buildFinalResponse, buildRedirectWithoutLocationResponse } from './http
 import type { ProxyConnection } from './connection';
 import type { DebugContext } from './debug';
 import { MAX_REDIRECT } from './constants';
-import { isRedirect, drainResponseBody, tooManyRedirectsResponse, redirectMethod } from './redirect';
+import { isRedirect, drainResponseBody, tooManyRedirectsResponse } from './redirect';
 
 export async function executeRedirectLoop(
-	proxy: Proxy, url: URL, method: string,
-	headers: HeadersInit | undefined, body: BodyInit | null | undefined,
+	proxy: Proxy, request: Request,
 	debug: DebugContext | undefined,
 ): Promise<Response> {
 	let activeConn: ProxyConnection | null = null;
 	let activeReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 	for (let i = 0; i < MAX_REDIRECT; i++) {
-		if (i > 0) debug?.log(`Redirect #${i}: ${method} ${url.toString()}`);
-		const mgmt = await ensureConnection(proxy, url, activeConn, activeReader, debug);
+		if (i > 0) debug?.log(`Redirect #${i}: ${request.method} ${request.url}`);
+		const reqUrl = new URL(request.url);
+		const mgmt = await ensureConnection(proxy, reqUrl, activeConn, activeReader, debug);
 		activeConn = mgmt.conn;
 		activeReader = mgmt.reader;
 		let freed = false;
@@ -29,7 +29,7 @@ export async function executeRedirectLoop(
 		};
 
 		try {
-			const result = await performRequest(activeConn, url, method, headers, body, debug, activeReader);
+			const result = await performRequest(activeConn, request, debug, activeReader);
 			activeReader = result.reader;
 
 			if (!isRedirect(result.status)) {
@@ -44,8 +44,10 @@ export async function executeRedirectLoop(
 			const location = result.headers.get('Location');
 			if (!location) return buildRedirectWithoutLocationResponse(debug, free, result);
 
-			url = new URL(location, url);
-			({ method, body } = redirectMethod(method, result.status));
+			const method = request.method;
+			const next = result.status !== 307 && result.status !== 308 ? 'GET' : method;
+			const body = result.status !== 307 && result.status !== 308 ? undefined : request.body;
+			request = new Request(new URL(location, request.url), { method: next, headers: request.headers, body });
 		} catch (e) {
 			debug?.log(`Error: ${e instanceof Error ? e.message : String(e)}`);
 			if (activeReader) activeReader.releaseLock();

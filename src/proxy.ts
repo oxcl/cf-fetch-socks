@@ -36,6 +36,7 @@ export class Proxy {
 	private pooled: boolean;
 	private pool = new Map<string, ProxyConnection[]>();
 	private busy = new WeakSet<ProxyConnection>();
+	private _uri: URL;
 
 	static acquireProxy(uri: string): Proxy {
 		const existing = Proxy.cache.get(uri);
@@ -52,6 +53,7 @@ export class Proxy {
 			undefined,
 			false,
 		);
+		proxy._uri = parsed.url;
 		Proxy.cache.set(uri, proxy);
 		return proxy;
 	}
@@ -62,6 +64,14 @@ export class Proxy {
 		this.connectFn = defaultConnect;
 		this.log = log;
 		this.pooled = pooled;
+		const hostPart = opts.hostname.includes(':') ? `[${opts.hostname}]` : opts.hostname;
+		this._uri = new URL(`socks5://${hostPart}:${opts.port}`);
+		if (opts.username) this._uri.username = opts.username;
+		if (opts.password) this._uri.password = opts.password;
+	}
+
+	get uri(): URL {
+		return this._uri;
 	}
 
 	async connect(target: ProxyTarget, signal?: AbortSignal, debug?: DebugContext): Promise<ProxyConnection> {
