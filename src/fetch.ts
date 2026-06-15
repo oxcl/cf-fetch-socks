@@ -72,7 +72,7 @@ function streamResponse(
 	return new Response(readable, { status, statusText, headers });
 }
 
-export async function socksFetch(urlOrString: string | URL, options: ProxyFetchOptions): Promise<Response> {
+export async function socksFetch(urlOrString: string | URL | Request, options: ProxyFetchOptions): Promise<Response> {
 	const debugOpt = options.debug;
 	const enable = debugOpt === true || (typeof debugOpt === 'object' && debugOpt.enable);
 	const logFn = typeof debugOpt === 'object' ? debugOpt.logFn : undefined;
@@ -85,9 +85,31 @@ export async function socksFetch(urlOrString: string | URL, options: ProxyFetchO
 		debug?.log(`Releasing connection to ${conn.target.host}:${conn.target.port}`);
 		proxyStr ? proxy.closeConnection(conn) : proxy.revokeConnection(conn);
 	};
+	const requestObj = urlOrString instanceof Request ? urlOrString : undefined;
+	if (requestObj) urlOrString = requestObj.url;
 	let url = new URL(urlOrString);
-	let method = (options.method ?? 'GET').toUpperCase();
-	let { headers, body } = options;
+	let method = (options.method ?? requestObj?.method ?? 'GET').toUpperCase();
+	const { headers: optionsHeaders, body: optionsBody } = options;
+	const headers = optionsHeaders ?? requestObj?.headers;
+	let body: BodyInit | null | undefined = optionsBody !== undefined ? optionsBody : (requestObj?.body ?? null);
+	if (body instanceof ReadableStream) {
+		const reader = body.getReader();
+		const chunks: Uint8Array[] = [];
+		let len = 0;
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			chunks.push(value);
+			len += value.length;
+		}
+		const buf = new Uint8Array(len);
+		let off = 0;
+		for (const c of chunks) {
+			buf.set(c, off);
+			off += c.length;
+		}
+		body = buf;
+	}
 
 	debug?.log(`-> ${method} ${url.toString()}`);
 	debug?.time('total');

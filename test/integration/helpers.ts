@@ -10,7 +10,7 @@ export function makeProxy() {
 	});
 }
 
-export async function socksFetch(url: string | URL, options: Parameters<typeof originalSocksFetch>[1]): Promise<Response> {
+export async function socksFetch(url: string | URL | Request, options: Parameters<typeof originalSocksFetch>[1]): Promise<Response> {
 	return originalSocksFetch(url, {
 		...options,
 		debug: { enable: true, logFn: console.log },
