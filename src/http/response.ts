@@ -1,6 +1,6 @@
 import { debug, printWaterfall } from '../debug';
 import { concatUint8Arrays } from '../utils';
-import { createDecompressionStream, pipeReaderToWriter } from './stream';
+import { createChunkedDecodingStream, createDecompressionStream, pipeReaderToWriter } from './stream';
 import type { ProxyConnection } from '../connection';
 
 export function parseResponseHeaders(
@@ -64,9 +64,24 @@ export function streamResponse(
 		headers.delete('Content-Length');
 		return new Response(null, { status, statusText, headers });
 	}
+
 	const cl = headers.get('Content-Length');
 	const contentLength = cl ? Number(cl) : undefined;
 	if (contentLength !== undefined) headers.delete('Content-Length');
+
+	const transferEncoding = headers.get('Transfer-Encoding');
+	const isChunked = transferEncoding?.toLowerCase().includes('chunked') ?? false;
+	if (isChunked) headers.delete('Transfer-Encoding');
+
+	if (isChunked && contentEncoding) {
+		headers.delete('Content-Encoding');
+		const chunked = createChunkedDecodingStream(reader, initialBytes);
+		return new Response(
+			createDecompressionStream(chunked.getReader(), new Uint8Array(0), undefined, contentEncoding, () => conn.close()),
+			{ status, statusText, headers },
+		);
+	}
+
 	if (contentEncoding) {
 		headers.delete('Content-Encoding');
 		return new Response(
@@ -74,6 +89,14 @@ export function streamResponse(
 			{ status, statusText, headers },
 		);
 	}
+
+	if (isChunked) {
+		return new Response(
+			createChunkedDecodingStream(reader, initialBytes, () => conn.close()),
+			{ status, statusText, headers },
+		);
+	}
+
 	const { readable, writable } = new TransformStream();
 	pipeReaderToWriter(reader, writable.getWriter(), initialBytes, () => conn.close(), contentLength);
 	return new Response(readable, { status, statusText, headers });

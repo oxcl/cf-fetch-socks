@@ -31,6 +31,82 @@ export async function pipeReaderToWriter(
 	}
 }
 
+function indexOfSeq(buffer: Uint8Array, seq: number[], start: number): number {
+	for (let i = start; i <= buffer.length - seq.length; i++) {
+		let match = true;
+		for (let j = 0; j < seq.length; j++) {
+			if (buffer[i + j] !== seq[j]) { match = false; break; }
+		}
+		if (match) return i;
+	}
+	return -1;
+}
+
+function extendBuffer(existing: Uint8Array, chunk: Uint8Array): Uint8Array {
+	const result = new Uint8Array(existing.length + chunk.length);
+	result.set(existing);
+	result.set(chunk, existing.length);
+	return result;
+}
+
+export function createChunkedDecodingStream(
+	reader: ReadableStreamDefaultReader<Uint8Array>,
+	initialBytes: Uint8Array,
+	cleanup?: () => void,
+): ReadableStream<Uint8Array> {
+	const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+	const writer = writable.getWriter();
+
+	(async () => {
+		const CRLF = [0x0D, 0x0A];
+		const decoder = new TextDecoder();
+		let buffer = initialBytes;
+		let offset = 0;
+
+		try {
+			while (true) {
+				const crlfIdx = indexOfSeq(buffer, CRLF, offset);
+				if (crlfIdx === -1) {
+					const { value, done } = await reader.read();
+					if (done) {
+						await writer.close();
+						return;
+					}
+					buffer = extendBuffer(buffer, value);
+					continue;
+				}
+				const hexStr = decoder.decode(buffer.slice(offset, crlfIdx));
+				const chunkSize = parseInt(hexStr.split(';')[0].trim(), 16);
+				if (isNaN(chunkSize)) { offset = crlfIdx + 1; continue; }
+
+				const payloadStart = crlfIdx + 2;
+				if (chunkSize === 0) {
+					await writer.close();
+					return;
+				}
+				const chunkEnd = payloadStart + chunkSize;
+				if (chunkEnd + 2 > buffer.length) {
+					const { value, done } = await reader.read();
+					if (done) {
+						await writer.close();
+						return;
+					}
+					buffer = extendBuffer(buffer, value);
+					continue;
+				}
+				await writer.write(buffer.slice(payloadStart, chunkEnd));
+				offset = chunkEnd + 2;
+			}
+		} catch (e) {
+			try { await writer.abort(e); } catch { /* ignore */ }
+		} finally {
+			cleanup?.();
+		}
+	})();
+
+	return readable;
+}
+
 function createDecompressor(encoding: string): zlib.BrotliCompress | zlib.Gunzip | zlib.Inflate | zlib.InflateRaw {
 	switch (encoding) {
 		case 'gzip': return zlib.createGunzip();

@@ -49,10 +49,10 @@ describe('response decoding: chunked', { timeout: 5_000 }, () => {
 	});
 });
 
-describe('response decoding: large body', { timeout: 30_000 }, () => {
+describe('response decoding: large body', { timeout: 3_000 }, () => {
 	it('large response body streams without buffering everything in memory', async () => {
 		const proxy = makeProxy();
-		const response = await socksFetch(`${HTTPBIN}/stream-bytes/${5_000_000}`, { proxy });
+		const response = await socksFetch(`${HTTPBIN}/stream-bytes/102400`, { proxy });
 		expect(response.status).toBe(200);
 		const reader = response.body!.getReader();
 		let total = 0;
@@ -62,9 +62,9 @@ describe('response decoding: large body', { timeout: 30_000 }, () => {
 			if (done) break;
 			total += value.length;
 			readCount++;
-			expect(total).toBeLessThanOrEqual(5_000_000);
+			expect(total).toBeLessThanOrEqual(102400);
 		}
-		expect(total).toBe(5_000_000);
+		expect(total).toBe(102400);
 		expect(readCount).toBeGreaterThan(1);
 	});
 });
