@@ -89,10 +89,6 @@ class Debug {
 		this._ctx = createDebugger(opt);
 	}
 
-	clearContext(): void {
-		this._ctx = undefined;
-	}
-
 	log(msg: string) { this._ctx?.log(msg); }
 	time(label: string) { this._ctx?.time(label); }
 	timeEnd(label: string) { this._ctx?.timeEnd(label); }

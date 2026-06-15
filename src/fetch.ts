@@ -17,15 +17,11 @@ export async function socksFetch(urlOrString: string | URL | Request, options: P
 		throw new AbortError('The operation was aborted');
 	}
 
-	const proxy = typeof options.proxy === 'string' ? Proxy.acquireProxy(options.proxy) : options.proxy;
+	const proxy = typeof options.proxy === 'string' ? Proxy.obtainProxy(options.proxy) : options.proxy;
 	const request = await buildRequestObject(urlOrString, options);
 
 	debug.log(`-> ${request.method} ${request.url} via proxy ${proxy.uri.hostname}`);
 	debug.time('total');
 
-	try {
-		return await executeRedirectLoop(proxy, request, options.signal);
-	} finally {
-		debug.clearContext();
-	}
+	return await executeRedirectLoop(proxy, request, options.signal);
 }

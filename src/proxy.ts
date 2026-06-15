@@ -37,7 +37,7 @@ export class Proxy {
 	private busy = new WeakSet<ProxyConnection>();
 	private _uri: URL;
 
-	static acquireProxy(uri: string): Proxy {
+	static obtainProxy(uri: string): Proxy {
 		const existing = Proxy.cache.get(uri);
 		if (existing) return existing;
 		const parsed = parseProxyUri(uri);
