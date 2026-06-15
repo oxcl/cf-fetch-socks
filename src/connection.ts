@@ -14,6 +14,7 @@ export interface ProxyCredentials {
 	port: number;
 	username?: string;
 	password?: string;
+	timeout?: number;
 }
 
 export type TunnelFn = (

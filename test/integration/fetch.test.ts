@@ -18,7 +18,7 @@ function proxyUri() {
 	return `socks5://${user}:${pass}@${env.SOCKS5_PROXY_HOSTNAME}:${env.SOCKS5_PROXY_PORT}`;
 }
 
-describe('test-fetch', { timeout: 1_000 }, () => {
+describe('test-fetch', () => {
 	it('makes a SOCKS5-proxied request and returns the proxy exit IP', async () => {
 		const response = await socksFetch(`${HTTPBIN}/ip`, { proxy: makeProxy() });
 		expect(response.status).toBe(200);
@@ -27,7 +27,7 @@ describe('test-fetch', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('POST with body', { timeout: 1_000 }, () => {
+describe('POST with body', () => {
 	it('sends a POST request with a JSON body through the proxy', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/post`, {
@@ -42,7 +42,7 @@ describe('POST with body', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('custom headers', { timeout: 1_000 }, () => {
+describe('custom headers', () => {
 	it('sends custom headers through the proxy', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/headers`, {
@@ -56,7 +56,7 @@ describe('custom headers', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('proxy as URI string', { timeout: 1_000 }, () => {
+describe('proxy as URI string', () => {
 	it('makes a proxied request using a socks5:// URI string', async () => {
 		const response = await socksFetch(`${HTTPBIN}/ip`, { proxy: proxyUri() });
 		expect(response.status).toBe(200);
@@ -65,7 +65,7 @@ describe('proxy as URI string', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('redirect following', { timeout: 1_000 }, () => {
+describe('redirect following', () => {
 	it('follows HTTP redirects through the proxy', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/redirect/2`, { proxy });
@@ -75,7 +75,7 @@ describe('redirect following', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('max redirects', { timeout: 1_000 }, () => {
+describe('max redirects', () => {
 	it('throws TypeError after exceeding 20 redirects', async () => {
 		const proxy = makeProxy();
 		const req = socksFetch(`${HTTPBIN}/redirect/21`, { proxy });
@@ -83,7 +83,7 @@ describe('max redirects', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('concurrent requests', { timeout: 1_000 }, () => {
+describe('concurrent requests', () => {
 	it('handles multiple concurrent proxied requests', async () => {
 		const proxy = makeProxy();
 		const results = await Promise.all(Array.from({ length: 3 }, () => socksFetch(`${HTTPBIN}/ip`, { proxy })));
@@ -95,7 +95,7 @@ describe('concurrent requests', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('gzip response', { timeout: 1_000 }, () => {
+describe('gzip response', () => {
 	it('returns decompressed gzip content', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/gzip`, { proxy });

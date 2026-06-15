@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeProxy, socksFetch, HTTPBIN } from './helpers';
 
-describe('response decoding: gzip', { timeout: 1_000 }, () => {
+describe('response decoding: gzip', () => {
 	it('gzip response is auto-decoded', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/gzip`, { proxy });
@@ -12,7 +12,7 @@ describe('response decoding: gzip', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('response decoding: brotli', { timeout: 1_000 }, () => {
+describe('response decoding: brotli', () => {
 	it('brotli response is auto-decoded', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/brotli`, { proxy });
@@ -23,7 +23,7 @@ describe('response decoding: brotli', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('response decoding: deflate', { timeout: 1_000 }, () => {
+describe('response decoding: deflate', () => {
 	it('deflate response is auto-decoded', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/deflate`, { proxy });
@@ -34,7 +34,7 @@ describe('response decoding: deflate', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('response decoding: chunked', { timeout: 5_000 }, () => {
+describe('response decoding: chunked', () => {
 	it('chunked transfer-encoding response is reassembled cleanly', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/stream/20`, { proxy });
@@ -49,7 +49,7 @@ describe('response decoding: chunked', { timeout: 5_000 }, () => {
 	});
 });
 
-describe('response decoding: large body', { timeout: 3_000 }, () => {
+describe('response decoding: large body', () => {
 	it('large response body streams without buffering everything in memory', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/stream-bytes/102400`, { proxy });

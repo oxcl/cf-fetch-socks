@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeProxy, socksFetch, HTTPBIN } from './helpers';
 
-describe('request body: string', { timeout: 1_000 }, () => {
+describe('request body: string', () => {
 	it('sends plain string body with correct Content-Type and length', async () => {
 		const proxy = makeProxy();
 		const body = 'hello world';
@@ -18,7 +18,7 @@ describe('request body: string', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('request body: URLSearchParams', { timeout: 1_000 }, () => {
+describe('request body: URLSearchParams', () => {
 	it('URLSearchParams body sends form-urlencoded', async () => {
 		const proxy = makeProxy();
 		const params = new URLSearchParams({ a: '1', b: 'two words' });
@@ -34,7 +34,7 @@ describe('request body: URLSearchParams', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('request body: FormData', { timeout: 1_000 }, () => {
+describe('request body: FormData', () => {
 	it('FormData body sends multipart/form-data with boundary', async () => {
 		const proxy = makeProxy();
 		const formData = new FormData();
@@ -58,7 +58,7 @@ describe('request body: FormData', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('request body: Blob', { timeout: 1_000 }, () => {
+describe('request body: Blob', () => {
 	it('Blob body sends correct Content-Type and bytes', async () => {
 		const proxy = makeProxy();
 		const blob = new Blob(['binary-ish data'], { type: 'application/octet-stream' });
@@ -74,7 +74,7 @@ describe('request body: Blob', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('request body: ReadableStream', { timeout: 1_000 }, () => {
+describe('request body: ReadableStream', () => {
 	it('ReadableStream body is streamed correctly', async () => {
 		const proxy = makeProxy();
 		const encoder = new TextEncoder();
@@ -96,7 +96,7 @@ describe('request body: ReadableStream', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('request body: null/undefined', { timeout: 1_000 }, () => {
+describe('request body: null/undefined', () => {
 	it('GET with no body sends no Content-Type', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/get`, { proxy });

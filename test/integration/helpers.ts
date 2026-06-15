@@ -3,12 +3,13 @@ import { Proxy, socks5Tunnel, socksFetch as originalSocksFetch } from '../../src
 
 export const HTTPBIN = 'http://172.17.0.2';
 
-export function makeProxy() {
+export function makeProxy(connectTimeout?: number) {
 	return new Proxy(socks5Tunnel, {
 		hostname: env.SOCKS5_PROXY_HOSTNAME,
 		port: Number(env.SOCKS5_PROXY_PORT),
 		username: env.SOCKS5_PROXY_USERNAME,
 		password: env.SOCKS5_PROXY_PASSWORD,
+		timeout: connectTimeout,
 	});
 }
 

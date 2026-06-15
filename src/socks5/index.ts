@@ -64,7 +64,7 @@ export const socks5Tunnel: TunnelFn = async (target, creds, connectFn, signal) =
 		}
 
 		const addressType = getAddressType(target.host);
-		const connectSignal = signal ?? AbortSignal.timeout(10_000);
+		const connectSignal = signal ?? AbortSignal.timeout(creds.timeout ?? 10_000);
 		const onAbort = () => {
 			try { socket.close(); } catch { /* ignore */ }
 		};

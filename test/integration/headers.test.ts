@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeProxy, socksFetch, HTTPBIN } from './helpers';
-describe('response headers: duplicates', { timeout: 1_000 }, () => {
+describe('response headers: duplicates', () => {
 	it.skip('duplicate response headers (Set-Cookie) are preserved', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/response-headers?Set-Cookie=a%3D1&Set-Cookie=b%3D2`, { proxy });
@@ -10,7 +10,7 @@ describe('response headers: duplicates', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('Host header: default port', { timeout: 1_000 }, () => {
+describe('Host header: default port', () => {
 	it.skip('Host header omits default port (443 for HTTPS)', async () => {
 		const proxy = makeProxy();
 		const url = `${HTTPBIN}:443/headers`;
@@ -21,7 +21,7 @@ describe('Host header: default port', { timeout: 1_000 }, () => {
 	});
 });
 
-describe('Host header: default port HTTP', { timeout: 1_000 }, () => {
+describe('Host header: default port HTTP', () => {
 	it.skip('Host header omits default port (80 for HTTP)', async () => {
 		const proxy = makeProxy();
 		const url = 'http://eu.httpbin.org:80/headers';

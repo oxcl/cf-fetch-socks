@@ -58,7 +58,7 @@ export class Proxy {
 
 	constructor(tunnelFn: TunnelFn, opts: ProxyOptions, pooled = true) {
 		this.tunnelFn = tunnelFn;
-		this.opts = { hostname: opts.hostname, port: opts.port, username: opts.username, password: opts.password };
+		this.opts = { hostname: opts.hostname, port: opts.port, username: opts.username, password: opts.password, timeout: opts.timeout };
 		this.connectFn = defaultConnect;
 		this.pooled = pooled;
 		const hostPart = opts.hostname.includes(':') ? `[${opts.hostname}]` : opts.hostname;
