@@ -6,6 +6,15 @@ import type { ProxyTarget, ProxyConnection } from './connection';
 import { TlsSessionError } from './errors';
 import { pumpSocket, makeTlsReadable, type TlsState } from './tls-helpers';
 setCryptoImplementation(webcryptoCrypto);
+
+const tlsLogger = {
+	info(...args: unknown[]) { debug.log(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')); },
+	debug(...args: unknown[]) { debug.log(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')); },
+	trace() {},
+	warn(...args: unknown[]) { debug.log(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')); },
+	error(...args: unknown[]) { debug.log(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')); },
+};
+
 const CIPHERS: NonNullable<Parameters<typeof makeTLSClient>[0]>['cipherSuites'] = [
 	'TLS_AES_256_GCM_SHA384',
 	'TLS_AES_128_GCM_SHA256',
@@ -29,6 +38,7 @@ function createTlsClient(
 		host: target.host,
 		verifyServerCertificate: true,
 		cipherSuites: CIPHERS,
+		logger: tlsLogger,
 		async write({ header, content }) {
 			const data = new Uint8Array(header.length + content.length);
 			data.set(header, 0);
