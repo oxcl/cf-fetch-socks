@@ -1,3 +1,4 @@
+import { AbortError } from './errors';
 import { debug } from './debug';
 import { ensureConnection, type Proxy } from './proxy';
 import { performRequest, drainBodyStream } from './http/request';
@@ -28,7 +29,7 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 	const redirectMode = request.redirect || 'follow';
 	for (let i = 0; i < MAX_REDIRECT; i++) {
 		if (signal?.aborted) {
-			throw new DOMException('The operation was aborted', 'AbortError');
+			throw new AbortError('The operation was aborted');
 		}
 		if (i > 0) debug.log(`Redirect #${i}: ${request.method} ${request.url}`);
 		const url = new URL(request.url);
@@ -118,7 +119,7 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 				activeConn = null;
 			}
 			if (signal?.aborted) {
-				throw new DOMException('The operation was aborted', 'AbortError');
+				throw new AbortError('The operation was aborted');
 			}
 			throw e;
 		}

@@ -1,7 +1,8 @@
 import { Proxy } from './proxy';
 import { executeRedirectLoop } from './executor';
 import { buildRequestObject } from './request';
-import { debug, setDebugContext, clearDebugContext } from './debug';
+import { AbortError } from './errors';
+import { debug } from './debug';
 import type { DebugOptions } from './debug';
 
 export interface ProxyFetchOptions extends RequestInit {
@@ -10,10 +11,10 @@ export interface ProxyFetchOptions extends RequestInit {
 }
 
 export async function socksFetch(urlOrString: string | URL | Request, options: ProxyFetchOptions): Promise<Response> {
-	setDebugContext(options.debug);
+	debug.setContext(options.debug);
 
 	if (options.signal?.aborted) {
-		throw new DOMException('The operation was aborted', 'AbortError');
+		throw new AbortError('The operation was aborted');
 	}
 
 	const proxy = typeof options.proxy === 'string' ? Proxy.acquireProxy(options.proxy) : options.proxy;
@@ -25,6 +26,6 @@ export async function socksFetch(urlOrString: string | URL | Request, options: P
 	try {
 		return await executeRedirectLoop(proxy, request, options.signal);
 	} finally {
-		clearDebugContext();
+		debug.clearContext();
 	}
 }
