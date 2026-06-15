@@ -1,6 +1,8 @@
 import { env } from 'cloudflare:test';
 import { Proxy, socks5Tunnel, socksFetch as originalSocksFetch } from '../../src';
 
+export const HTTPBIN = 'http://172.17.0.2';
+
 export function makeProxy() {
 	return new Proxy(socks5Tunnel, {
 		hostname: env.SOCKS5_PROXY_HOSTNAME,

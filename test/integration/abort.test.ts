@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeProxy, socksFetch } from './helpers';
-
-const HTTPBIN = 'https://eu.httpbin.org';
+import { makeProxy, socksFetch, HTTPBIN } from './helpers';
 
 describe('abort: timeout', { timeout: 10_000 }, () => {
 	it.skip('AbortSignal.timeout() aborts a slow request', async () => {
@@ -21,9 +19,7 @@ describe('abort: pre-aborted', { timeout: 3_000 }, () => {
 		const controller = new AbortController();
 		controller.abort();
 		const start = Date.now();
-		await expect(
-			socksFetch(`${HTTPBIN}/get`, { proxy, signal: controller.signal }),
-		).rejects.toThrow(DOMException);
+		await expect(socksFetch(`${HTTPBIN}/get`, { proxy, signal: controller.signal })).rejects.toThrow(DOMException);
 		expect(Date.now() - start).toBeLessThan(1000);
 	});
 });

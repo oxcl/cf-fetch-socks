@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeProxy, socksFetch } from './helpers';
-
-const HTTPBIN = 'https://eu.httpbin.org';
-
+import { makeProxy, socksFetch, HTTPBIN } from './helpers';
 describe('socksFetch accepts a Request object', { timeout: 10_000 }, () => {
 	it.skip('works when passed a Request object as first argument', async () => {
 		const proxy = makeProxy();

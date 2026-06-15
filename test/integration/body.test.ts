@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeProxy, socksFetch } from './helpers';
-
-const HTTPBIN = 'https://eu.httpbin.org';
+import { makeProxy, socksFetch, HTTPBIN } from './helpers';
 
 describe('request body: string', { timeout: 10_000 }, () => {
 	it.skip('sends plain string body with correct Content-Type and length', async () => {

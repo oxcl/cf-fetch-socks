@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeProxy, socksFetch } from './helpers';
-
-const HTTPBIN = 'https://eu.httpbin.org';
+import { makeProxy, socksFetch, HTTPBIN } from './helpers';
 
 describe('response decoding: gzip', { timeout: 10_000 }, () => {
 	it.skip('gzip response is auto-decoded', async () => {
