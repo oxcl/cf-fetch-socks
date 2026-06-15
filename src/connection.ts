@@ -1,6 +1,6 @@
 import type { Socket } from '@cloudflare/workers-types';
 import { debug } from './debug';
-import type { ConnectFn, LogFn } from './socket';
+import type { ConnectFn } from './socket';
 import { wrapTls } from './tls';
 
 export interface ProxyTarget {
@@ -20,7 +20,6 @@ export type TunnelFn = (
 	target: ProxyTarget,
 	creds: ProxyCredentials,
 	connectFn: ConnectFn,
-	log: LogFn,
 	signal?: AbortSignal,
 ) => Promise<{ socket: Socket; leftover: Uint8Array }>;
 
@@ -37,18 +36,17 @@ export async function openConnection(
 	creds: ProxyCredentials,
 	target: ProxyTarget,
 	connectFn: ConnectFn,
-	log: LogFn,
 	signal?: AbortSignal,
 ): Promise<ProxyConnection> {
 	debug.time('tunnel');
-	const { socket, leftover } = await tunnelFn(target, creds, connectFn, log, signal);
+	const { socket, leftover } = await tunnelFn(target, creds, connectFn, signal);
 	debug.timeEnd('tunnel');
 
 	if (!target.tls) {
 		return wrapRaw(socket, target);
 	}
 
-	return wrapTls(socket, leftover, target, log, signal);
+	return wrapTls(socket, leftover, target, signal);
 }
 
 function wrapRaw(socket: Socket, target: ProxyTarget): ProxyConnection {
@@ -57,7 +55,9 @@ function wrapRaw(socket: Socket, target: ProxyTarget): ProxyConnection {
 
 	return {
 		target,
-		get closed() { return closed; },
+		get closed() {
+			return closed;
+		},
 		async write(data: Uint8Array) {
 			if (closed) throw new Error('Connection closed');
 			await writer.write(data);
@@ -66,8 +66,16 @@ function wrapRaw(socket: Socket, target: ProxyTarget): ProxyConnection {
 		close() {
 			if (closed) return;
 			closed = true;
-			try { socket.close(); } catch { /* ignore */ }
-			try { writer.releaseLock(); } catch { /* ignore */ }
+			try {
+				socket.close();
+			} catch {
+				/* ignore */
+			}
+			try {
+				writer.releaseLock();
+			} catch {
+				/* ignore */
+			}
 		},
 	};
 }

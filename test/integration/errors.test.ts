@@ -13,7 +13,7 @@ describe('error: unreachable host', () => {
 describe('error: connection refused', () => {
 	it('connection refused surfaces ConnectionRefusedError', async () => {
 		const proxy = makeProxy();
-		const req = socksFetch('https://httpbin.org:9999/get', { proxy });
+		const req = socksFetch('https://eu.httpbin.org:9999/get', { proxy });
 		await expect(req).rejects.toThrow(ConnectionRefusedError);
 	});
 });
@@ -21,7 +21,7 @@ describe('error: connection refused', () => {
 describe('error: too many redirects', () => {
 	it('too-many-redirects throws TypeError after 20 hops', async () => {
 		const proxy = makeProxy();
-		const req = socksFetch('https://httpbin.org/redirect/21', { proxy });
+		const req = socksFetch('https://eu.httpbin.org/redirect/21', { proxy });
 		await expect(req).rejects.toThrow(TypeError);
 	});
 });

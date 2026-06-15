@@ -1,18 +1,41 @@
 import { debug } from './debug';
 import { ensureConnection, type Proxy } from './proxy';
-import { performRequest } from './http/request';
+import { performRequest, drainBodyStream } from './http/request';
 import { buildFinalResponse, buildRedirectWithoutLocationResponse } from './http/response';
 import type { ProxyConnection } from './connection';
 import { MAX_REDIRECT } from './constants';
 import { isRedirect, drainResponseBody, tooManyRedirectsResponse } from './redirect';
 
-export async function executeRedirectLoop(proxy: Proxy, request: Request): Promise<Response> {
+function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+	if (!signal || signal.aborted) return promise;
+	return new Promise<T>((resolve, reject) => {
+		const onAbort = () => {
+			reject(new DOMException('The operation was aborted', 'AbortError'));
+		};
+		signal.addEventListener('abort', onAbort, { once: true });
+		promise.then(
+			(v) => { signal.removeEventListener('abort', onAbort); resolve(v); },
+			(e) => { signal.removeEventListener('abort', onAbort); reject(e); },
+		);
+	});
+}
+
+export async function executeRedirectLoop(proxy: Proxy, request: Request, signal?: AbortSignal): Promise<Response> {
 	let activeConn: ProxyConnection | null = null;
 	let activeReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+	let bodyBytes: Uint8Array | undefined;
 	for (let i = 0; i < MAX_REDIRECT; i++) {
+		if (signal?.aborted) {
+			throw new DOMException('The operation was aborted', 'AbortError');
+		}
 		if (i > 0) debug.log(`Redirect #${i}: ${request.method} ${request.url}`);
 		const url = new URL(request.url);
-		const mgmt = await ensureConnection(proxy, url, activeConn, activeReader);
+
+		if (request.body && !bodyBytes) {
+			bodyBytes = await drainBodyStream(request.body);
+		}
+
+		const mgmt = await ensureConnection(proxy, url, activeConn, activeReader, signal);
 		activeConn = mgmt.conn;
 		activeReader = mgmt.reader;
 		let freed = false;
@@ -29,8 +52,19 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request): Promi
 		};
 
 		try {
-			const result = await performRequest(activeConn, request, activeReader);
+			const result = await abortable(performRequest(activeConn, request, activeReader, bodyBytes), signal);
 			activeReader = result.reader;
+
+			if (request.method === 'HEAD') {
+				activeReader.releaseLock();
+				activeReader = null;
+				const conn = activeConn!;
+				activeConn = null;
+				proxy.release(conn);
+				result.headers.delete('Content-Length');
+				result.headers.delete('Content-Encoding');
+				return new Response(null, { status: result.status, statusText: result.statusText, headers: result.headers });
+			}
 
 			if (!isRedirect(result.status)) {
 				activeReader = null;
@@ -46,7 +80,8 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request): Promi
 
 			const method = request.method;
 			const next = result.status !== 307 && result.status !== 308 ? 'GET' : method;
-			const body = result.status !== 307 && result.status !== 308 ? undefined : request.body;
+			const body = result.status !== 307 && result.status !== 308 ? undefined : bodyBytes;
+			if (result.status !== 307 && result.status !== 308) bodyBytes = undefined;
 			request = new Request(new URL(location, request.url), { method: next, headers: request.headers, body });
 		} catch (e) {
 			debug.log(`Error: ${e instanceof Error ? e.message : String(e)}`);
@@ -54,6 +89,9 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request): Promi
 			if (!freed && activeConn) {
 				activeConn.close();
 				activeConn = null;
+			}
+			if (signal?.aborted) {
+				throw new DOMException('The operation was aborted', 'AbortError');
 			}
 			throw e;
 		}

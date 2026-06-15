@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeProxy, socksFetch } from './helpers';
 
-const HTTPBIN = 'https://httpbin.org';
+const HTTPBIN = 'https://eu.httpbin.org';
 
 describe('request body: string', () => {
 	it('sends plain string body with correct Content-Type and length', async () => {

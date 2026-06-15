@@ -2,7 +2,8 @@ import { ConnectionTimeoutError, Socks5ProtocolError, Socks5ServerError } from '
 import type { AddressType } from './address';
 import { encodeAddress } from './address';
 
-function checkTimeout(signal?: AbortSignal, message = 'SOCKS5 connect timed out'): void {
+function checkTimeout(signal?: AbortSignal, userSignal?: AbortSignal, message = 'SOCKS5 connect timed out'): void {
+	if (userSignal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
 	if (signal?.aborted) throw new ConnectionTimeoutError(message);
 }
 
@@ -20,16 +21,17 @@ export async function sendConnectRequest(
 export async function readConnectReply(
 	reader: ReadableStreamDefaultReader<Uint8Array>,
 	signal?: AbortSignal,
+	userSignal?: AbortSignal,
 ): Promise<{ leftover: Uint8Array }> {
 	let result: ReadableStreamReadResult<Uint8Array>;
 	try {
 		result = await reader.read();
 	} catch (err) {
-		checkTimeout(signal);
+		checkTimeout(signal, userSignal);
 		throw err;
 	}
 	if (result.done) {
-		checkTimeout(signal);
+		checkTimeout(signal, userSignal);
 		throw new Socks5ProtocolError('Server closed during connect reply');
 	}
 
@@ -44,7 +46,7 @@ export async function readConnectReply(
 		return { leftover: first.slice(4 + payloadSize) };
 	}
 
-	return readRemainingReply(reader, payloadSize - alreadyRead, signal);
+	return readRemainingReply(reader, payloadSize - alreadyRead, signal, userSignal);
 }
 
 function replyPayloadSize(atyp: number, firstChunk: Uint8Array): number {
@@ -60,6 +62,7 @@ async function readRemainingReply(
 	reader: ReadableStreamDefaultReader<Uint8Array>,
 	needed: number,
 	signal?: AbortSignal,
+	userSignal?: AbortSignal,
 ): Promise<{ leftover: Uint8Array }> {
 	const chunks: Uint8Array[] = [];
 	let totalRead = 0;
@@ -69,11 +72,11 @@ async function readRemainingReply(
 		try {
 			chunk = await reader.read();
 		} catch (err) {
-			checkTimeout(signal);
+			checkTimeout(signal, userSignal);
 			throw err;
 		}
 		if (chunk.done) {
-			checkTimeout(signal);
+			checkTimeout(signal, userSignal);
 			throw new Socks5ProtocolError('Server closed while reading reply');
 		}
 		const { value } = chunk;

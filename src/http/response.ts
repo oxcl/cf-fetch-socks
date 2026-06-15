@@ -1,6 +1,6 @@
 import { debug, printWaterfall } from '../debug';
 import { concatUint8Arrays } from '../utils';
-import { createGunzipStream, pipeReaderToWriter } from './stream';
+import { createDecompressionStream, pipeReaderToWriter } from './stream';
 import type { ProxyConnection } from '../connection';
 
 export function parseResponseHeaders(
@@ -15,7 +15,7 @@ export function parseResponseHeaders(
 	for (let i = 1; i < lines.length; i++) {
 		const colon = lines[i].indexOf(':');
 		if (colon === -1) continue;
-		headers.set(lines[i].substring(0, colon).trim(), lines[i].substring(colon + 1).trim());
+		headers.append(lines[i].substring(0, colon).trim(), lines[i].substring(colon + 1).trim());
 	}
 
 	return {
@@ -48,6 +48,8 @@ export async function readHeaders(
 	return { status, statusText, headers, initialBytes: allData.slice(bodyStart) };
 }
 
+const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
+
 export function streamResponse(
 	conn: ProxyConnection,
 	reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -55,15 +57,20 @@ export function streamResponse(
 	status: number,
 	statusText: string,
 	headers: Headers,
-	isGzip: boolean,
+	contentEncoding: string | null,
 ): Response {
+	if (NULL_BODY_STATUSES.has(status)) {
+		pipeReaderToWriter(reader, new WritableStream<Uint8Array>(), initialBytes, () => conn.close());
+		headers.delete('Content-Length');
+		return new Response(null, { status, statusText, headers });
+	}
 	const cl = headers.get('Content-Length');
 	const contentLength = cl ? Number(cl) : undefined;
 	if (contentLength !== undefined) headers.delete('Content-Length');
-	if (isGzip) {
+	if (contentEncoding) {
 		headers.delete('Content-Encoding');
 		return new Response(
-			createGunzipStream(reader, initialBytes, contentLength, () => conn.close()),
+			createDecompressionStream(reader, initialBytes, contentLength, contentEncoding, () => conn.close()),
 			{ status, statusText, headers },
 		);
 	}
@@ -80,7 +87,7 @@ export function buildFinalResponse(
 	debug.timeEnd('total');
 	printWaterfall();
 	const ce = result.headers.get('Content-Encoding');
-	return streamResponse(conn, result.reader, result.initialBytes, result.status, result.statusText, result.headers, ce === 'gzip');
+	return streamResponse(conn, result.reader, result.initialBytes, result.status, result.statusText, result.headers, ce);
 }
 
 export function buildRedirectWithoutLocationResponse(

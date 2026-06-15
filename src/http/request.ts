@@ -18,9 +18,11 @@ export function buildRequest(
 	body?: BodyInit | null,
 ): Uint8Array {
 	const path = target.pathname + target.search;
+	const defaultPort = target.protocol === 'https:' ? 443 : 80;
+	const host = target.port && Number(target.port) !== defaultPort ? target.host : target.hostname;
 	const lines = [
 		`${method} ${path} HTTP/1.1`,
-		`Host: ${target.host}`,
+		`Host: ${host}`,
 		`User-Agent: undici`,
 		`Accept: */*`,
 		`Connection: keep-alive`,
@@ -55,13 +57,33 @@ export function buildRequest(
 	return headerBytes;
 }
 
+export async function drainBodyStream(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
+	const reader = stream.getReader();
+	const chunks: Uint8Array[] = [];
+	let len = 0;
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		chunks.push(value);
+		len += value.length;
+	}
+	const buf = new Uint8Array(len);
+	let off = 0;
+	for (const c of chunks) {
+		buf.set(c, off);
+		off += c.length;
+	}
+	return buf;
+}
+
 export async function performRequest(
 	conn: ProxyConnection,
 	request: Request,
 	reader?: ReadableStreamDefaultReader<Uint8Array> | null,
+	bodyBytes?: Uint8Array,
 ) {
 	const url = new URL(request.url);
-	const reqBytes = buildRequest(url, request.method, request.headers, request.body);
+	const reqBytes = buildRequest(url, request.method, request.headers, bodyBytes);
 	debug.dump(reqBytes, 'http.request');
 
 	debug.time('http.send');

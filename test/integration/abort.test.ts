@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeProxy, socksFetch } from './helpers';
 
-const HTTPBIN = 'https://httpbin.org';
+const HTTPBIN = 'https://eu.httpbin.org';
 
 describe('abort: timeout', () => {
 	it('AbortSignal.timeout() aborts a slow request', async () => {

@@ -12,6 +12,10 @@ export interface ProxyFetchOptions extends RequestInit {
 export async function socksFetch(urlOrString: string | URL | Request, options: ProxyFetchOptions): Promise<Response> {
 	setDebugContext(options.debug);
 
+	if (options.signal?.aborted) {
+		throw new DOMException('The operation was aborted', 'AbortError');
+	}
+
 	const proxy = typeof options.proxy === 'string' ? Proxy.acquireProxy(options.proxy) : options.proxy;
 	const request = await buildRequestObject(urlOrString, options);
 
@@ -19,7 +23,7 @@ export async function socksFetch(urlOrString: string | URL | Request, options: P
 	debug.time('total');
 
 	try {
-		return await executeRedirectLoop(proxy, request);
+		return await executeRedirectLoop(proxy, request, options.signal);
 	} finally {
 		clearDebugContext();
 	}

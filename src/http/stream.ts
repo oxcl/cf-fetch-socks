@@ -31,33 +31,43 @@ export async function pipeReaderToWriter(
 	}
 }
 
-export function createGunzipStream(
+function createDecompressor(encoding: string): zlib.BrotliCompress | zlib.Gunzip | zlib.Inflate | zlib.InflateRaw {
+	switch (encoding) {
+		case 'gzip': return zlib.createGunzip();
+		case 'deflate': return zlib.createInflate();
+		case 'br': return zlib.createBrotliDecompress();
+		default: return zlib.createGunzip();
+	}
+}
+
+export function createDecompressionStream(
 	reader: ReadableStreamDefaultReader<Uint8Array>,
 	initialBytes: Uint8Array,
 	contentLength: number | undefined,
+	encoding: string,
 	cleanup?: () => void,
 ): ReadableStream<Uint8Array> {
-	const gunzip = zlib.createGunzip();
+	const decompressor = createDecompressor(encoding);
 	let remaining = contentLength !== undefined ? contentLength - initialBytes.length : -1;
 
 	return new ReadableStream({
 		async start(controller) {
-			gunzip.on('data', (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)));
-			gunzip.on('end', () => { controller.close(); cleanup?.(); });
-			gunzip.on('error', (err) => { controller.error(err); cleanup?.(); });
+			decompressor.on('data', (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)));
+			decompressor.on('end', () => { controller.close(); cleanup?.(); });
+			decompressor.on('error', (err) => { controller.error(err); cleanup?.(); });
 
-			if (initialBytes.length > 0) gunzip.write(initialBytes);
+			if (initialBytes.length > 0) decompressor.write(initialBytes);
 
 			while (remaining > 0) {
 				const { value, done } = await reader.read();
 				if (done) break;
-				gunzip.write(value);
+				decompressor.write(value);
 				remaining -= value.length;
 			}
-			gunzip.end();
+			decompressor.end();
 		},
 		cancel() {
-			gunzip.destroy();
+			decompressor.destroy();
 			cleanup?.();
 		},
 	});

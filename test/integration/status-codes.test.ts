@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeProxy, socksFetch } from './helpers';
 
-const HTTPBIN = 'https://httpbin.org';
+const HTTPBIN = 'https://eu.httpbin.org';
 
 describe('status codes with no body', () => {
 	it('204 No Content response has no body', async () => {

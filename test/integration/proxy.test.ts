@@ -18,7 +18,7 @@ describe('abort', () => {
 		const controller = new AbortController();
 		controller.abort();
 
-		await expect(proxy.acquire({ host: 'httpbin.org', port: 443, tls: true }, controller.signal)).rejects.toThrow(AbortError);
+		await expect(proxy.acquire({ host: 'eu.httpbin.org', port: 443, tls: true }, controller.signal)).rejects.toThrow(AbortError);
 	});
 });
 
@@ -32,7 +32,7 @@ describe('unreachable target', { timeout: 30_000 }, () => {
 describe('SOCKS5 username/password auth', () => {
 	it('should connect through an authenticated SOCKS5 proxy with valid credentials', async () => {
 		const proxy = makeProxy();
-		const conn = await proxy.acquire({ host: 'httpbin.org', port: 443, tls: true });
+		const conn = await proxy.acquire({ host: 'eu.httpbin.org', port: 443, tls: true });
 		expect(conn).toBeDefined();
 		expect(conn.closed).toBe(false);
 		conn.close();
@@ -45,7 +45,7 @@ describe('SOCKS5 username/password auth', () => {
 			username: 'wronguser',
 			password: 'wrongpass',
 		});
-		await expect(badProxy.acquire({ host: 'httpbin.org', port: 80, tls: false })).rejects.toThrow(Socks5AuthError);
+		await expect(badProxy.acquire({ host: 'eu.httpbin.org', port: 80, tls: false })).rejects.toThrow(Socks5AuthError);
 	});
 
 	it('should throw when proxy offers no acceptable auth method', async () => {

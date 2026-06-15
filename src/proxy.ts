@@ -1,5 +1,5 @@
 import { debug } from './debug';
-import type { ConnectFn, LogFn } from './socket';
+import type { ConnectFn } from './socket';
 import { defaultConnect } from './socket';
 import { openConnection, type ProxyConnection, type ProxyTarget, type ProxyCredentials, type TunnelFn } from './connection';
 import { socks5Tunnel } from './socks5/index';
@@ -11,6 +11,7 @@ export async function ensureConnection(
 	url: URL,
 	activeConn: ProxyConnection | null,
 	activeReader: ReadableStreamDefaultReader<Uint8Array> | null,
+	signal?: AbortSignal,
 ): Promise<{ conn: ProxyConnection; reader: ReadableStreamDefaultReader<Uint8Array> | null }> {
 	const isTls = url.protocol === 'https:';
 	const port = url.port ? Number(url.port) : isTls ? 443 : 80;
@@ -22,7 +23,7 @@ export async function ensureConnection(
 		if (activeReader) activeReader.releaseLock();
 	}
 	const conOpts: ProxyTarget = { host: url.hostname, port, tls: isTls };
-	const conn = await proxy.connect(conOpts, undefined);
+	const conn = await proxy.connect(conOpts, signal);
 	return { conn, reader: null };
 }
 export class Proxy {
@@ -31,7 +32,6 @@ export class Proxy {
 	private tunnelFn: TunnelFn;
 	private opts: ProxyCredentials;
 	private connectFn: ConnectFn;
-	private log: LogFn;
 	private pooled: boolean;
 	private pool = new Map<string, ProxyConnection[]>();
 	private busy = new WeakSet<ProxyConnection>();
@@ -50,18 +50,16 @@ export class Proxy {
 				password: parsed.password,
 			},
 			undefined,
-			false,
 		);
 		proxy._uri = parsed.url;
 		Proxy.cache.set(uri, proxy);
 		return proxy;
 	}
 
-	constructor(tunnelFn: TunnelFn, opts: ProxyOptions, log: LogFn = console.log, pooled = true) {
+	constructor(tunnelFn: TunnelFn, opts: ProxyOptions, pooled = true) {
 		this.tunnelFn = tunnelFn;
 		this.opts = { hostname: opts.hostname, port: opts.port, username: opts.username, password: opts.password };
 		this.connectFn = defaultConnect;
-		this.log = log;
 		this.pooled = pooled;
 		const hostPart = opts.hostname.includes(':') ? `[${opts.hostname}]` : opts.hostname;
 		this._uri = new URL(`socks5://${hostPart}:${opts.port}`);
@@ -82,9 +80,8 @@ export class Proxy {
 	}
 
 	private async acquire(target: ProxyTarget, signal?: AbortSignal): Promise<ProxyConnection> {
-		this.log(`Opening new connection to ${target.host}:${target.port}`);
 		debug.log(`Opening new connection to ${target.host}:${target.port}`);
-		return openConnection(this.tunnelFn, this.opts, target, this.connectFn, this.log, signal);
+		return openConnection(this.tunnelFn, this.opts, target, this.connectFn, signal);
 	}
 
 	async acquireConnection(target: ProxyTarget, signal?: AbortSignal): Promise<ProxyConnection> {

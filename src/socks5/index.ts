@@ -1,6 +1,6 @@
 import type { Socket } from '@cloudflare/workers-types';
 import { debug } from '../debug';
-import type { ConnectFn, LogFn } from '../socket';
+import type { ConnectFn } from '../socket';
 import type { ProxyTarget, ProxyCredentials, TunnelFn } from '../connection';
 import {
 	ConnectionRefusedError,
@@ -37,7 +37,7 @@ function connectProxySocket(
 	}
 }
 
-export const socks5Tunnel: TunnelFn = async (target, creds, connectFn, log, signal) => {
+export const socks5Tunnel: TunnelFn = async (target, creds, connectFn, signal) => {
 	const { username, password, hostname, port } = creds;
 
 	debug.time('tcp.connect');
@@ -53,10 +53,10 @@ export const socks5Tunnel: TunnelFn = async (target, creds, connectFn, log, sign
 		await sendGreeting(writer);
 		const authMethod = await receiveGreeting(reader);
 		debug.timeEnd('socks5.greet');
-		log('sent socks greeting');
+		debug.log('sent socks greeting');
 
 		if (authMethod === 0x02) {
-			log('socks server needs auth');
+			debug.log('socks server needs auth');
 			if (!username || !password) throw new Socks5AuthError('No credentials provided');
 			debug.time('socks5.auth');
 			await authenticate(writer, reader, username, password);
@@ -73,14 +73,15 @@ export const socks5Tunnel: TunnelFn = async (target, creds, connectFn, log, sign
 		try {
 			debug.time('socks5.connect');
 			await sendConnectRequest(writer, target.host, target.port, addressType);
-			const reply = await readConnectReply(reader, connectSignal);
+			const reply = await readConnectReply(reader, connectSignal, signal);
 			leftover = reply.leftover;
 			debug.timeEnd('socks5.connect');
 		} finally {
-			connectSignal.removeEventListener('abort', onAbort);
+			if (!signal) connectSignal.removeEventListener('abort', onAbort);
 		}
-		log('socks connection opened');
+		debug.log('socks connection opened');
 
+		if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
 		socketOwned = true;
 		return { socket, leftover };
 	} finally {

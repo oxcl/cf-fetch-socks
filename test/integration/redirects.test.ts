@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { makeProxy, socksFetch } from './helpers';
 
-const HTTPBIN = 'https://httpbin.org';
-const HTTPBINGO = 'https://httpbingo.org';
+const HTTPBIN = 'https://eu.httpbin.org';
+const HTTPBINGO = 'https://httpbin.org';
 
 describe('redirect: response.url and response.redirected', () => {
 	it('url and redirected after a single redirect', async () => {
@@ -87,7 +87,7 @@ describe('redirect: Authorization header stripping', () => {
 	it('Authorization header is stripped on cross-origin redirect', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(
-			`${HTTPBIN}/redirect-to?url=${encodeURIComponent(`${HTTPBINGO}/headers`)}&status_code=302`,
+			`${HTTPBINGO}/redirect-to?url=${encodeURIComponent(`${HTTPBIN}/headers`)}&status_code=302`,
 			{ proxy, headers: { Authorization: 'Bearer secret' } },
 		);
 		expect(response.status).toBe(200);

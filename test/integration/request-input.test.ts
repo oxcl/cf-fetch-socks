@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeProxy, socksFetch } from './helpers';
 
-const HTTPBIN = 'https://httpbin.org';
+const HTTPBIN = 'https://eu.httpbin.org';
 
 describe('socksFetch accepts a Request object', () => {
 	it('works when passed a Request object as first argument', async () => {
