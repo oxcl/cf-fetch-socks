@@ -13,7 +13,7 @@ function makeProxy() {
 }
 
 describe('abort', () => {
-	it.skip('throws AbortError when signal is already aborted', async () => {
+	it('throws AbortError when signal is already aborted', async () => {
 		const proxy = makeProxy();
 		const controller = new AbortController();
 		controller.abort();
@@ -23,14 +23,14 @@ describe('abort', () => {
 });
 
 describe('unreachable target', () => {
-	it.skip('throws a TunnelError when connecting to an unreachable target', async () => {
+	it('throws a TunnelError when connecting to an unreachable target', async () => {
 		const proxy = makeProxy();
 		await expect(proxy.acquire({ host: '1.2.3.4', port: 1, tls: false })).rejects.toThrow(TunnelError);
 	});
 });
 
 describe('SOCKS5 username/password auth', () => {
-	it.skip('should connect through an authenticated SOCKS5 proxy with valid credentials', async () => {
+	it('should connect through an authenticated SOCKS5 proxy with valid credentials', async () => {
 		const proxy = makeProxy();
 		const conn = await proxy.acquire({ host: 'eu.httpbin.org', port: 443, tls: true });
 		expect(conn).toBeDefined();
@@ -38,7 +38,7 @@ describe('SOCKS5 username/password auth', () => {
 		conn.close();
 	});
 
-	it.skip('should throw on SOCKS5 auth failure (wrong credentials)', async () => {
+	it('should throw on SOCKS5 auth failure (wrong credentials)', async () => {
 		const badProxy = new Proxy(socks5Tunnel, {
 			hostname: env.SOCKS5_PROXY_HOSTNAME,
 			port: Number(env.SOCKS5_PROXY_PORT),
@@ -48,7 +48,7 @@ describe('SOCKS5 username/password auth', () => {
 		await expect(badProxy.acquire({ host: 'eu.httpbin.org', port: 80, tls: false })).rejects.toThrow(Socks5AuthError);
 	});
 
-	it.skip('should throw when proxy offers no acceptable auth method', async () => {
+	it('should throw when proxy offers no acceptable auth method', async () => {
 		const { receiveGreeting } = await import('../../src/socks5/greeting');
 		const stream = new ReadableStream({
 			start(controller) {

@@ -20,9 +20,9 @@ describe('redirect: response.url and response.redirected', () => {
 });
 
 describe('redirect: 303 converts POST to GET', () => {
-	it.skip('303 redirect converts POST to GET with no body', async () => {
+	it('303 redirect converts POST to GET with no body', async () => {
 		const proxy = makeProxy();
-		const response = await socksFetch(`${HTTPBIN}/redirect-to?url=%2Fget&status_code=303`, {
+		const response = await socksFetch(`${HTTPBIN}/redirect-to?url=%2Fanything&status_code=303`, {
 			proxy,
 			method: 'POST',
 			body: 'should-be-dropped',
@@ -34,7 +34,7 @@ describe('redirect: 303 converts POST to GET', () => {
 });
 
 describe('redirect: 307 preserves method and body', () => {
-	it.skip('307 redirect preserves POST method and body', async () => {
+	it('307 redirect preserves POST method and body', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/redirect-to?url=%2Fpost&status_code=307`, {
 			proxy,
@@ -49,7 +49,7 @@ describe('redirect: 307 preserves method and body', () => {
 });
 
 describe('redirect: manual', () => {
-	it.skip('redirect: "manual" returns the redirect response without following', async () => {
+	it('redirect: "manual" returns the redirect response without following', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/redirect-to?url=%2Fget&status_code=302`, { proxy, redirect: 'manual' });
 		expect(response.status).toBe(302);
@@ -58,7 +58,7 @@ describe('redirect: manual', () => {
 });
 
 describe('redirect: error', () => {
-	it.skip('redirect: "error" throws on a redirect', async () => {
+	it('redirect: "error" throws on a redirect', async () => {
 		const proxy = makeProxy();
 		const req = socksFetch(`${HTTPBIN}/redirect-to?url=%2Fget&status_code=302`, { proxy, redirect: 'error' });
 		await expect(req).rejects.toThrow(TypeError);
@@ -66,9 +66,9 @@ describe('redirect: error', () => {
 });
 
 describe('redirect: Authorization header stripping', () => {
-	it.skip('Authorization header is stripped on cross-origin redirect', async () => {
+	it('Authorization header is stripped on cross-origin redirect', async () => {
 		const proxy = makeProxy();
-		const response = await socksFetch(`${HTTPBIN}/redirect-to?url=${encodeURIComponent(`${HTTPBIN}/headers`)}&status_code=302`, {
+		const response = await socksFetch(`${HTTPBIN}/redirect-to?url=${encodeURIComponent(`http://172.17.0.1:8080/headers`)}&status_code=302`, {
 			proxy,
 			headers: { Authorization: 'Bearer secret' },
 		});
@@ -78,7 +78,7 @@ describe('redirect: Authorization header stripping', () => {
 		expect(json.headers['Authorization']).toBeUndefined();
 	});
 
-	it.skip('Authorization header is preserved on same-origin redirect', async () => {
+	it('Authorization header is preserved on same-origin redirect', async () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/redirect-to?url=%2Fheaders&status_code=302`, {
 			proxy,

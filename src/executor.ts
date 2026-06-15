@@ -72,7 +72,7 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 				activeReader = null;
 				const conn = activeConn!;
 				activeConn = null;
-				return buildFinalResponse(conn, result, redirected);
+				return buildFinalResponse(conn, result, redirected, request.url);
 			}
 
 			if (redirectMode === 'manual') {
