@@ -81,7 +81,7 @@ export const socks5Tunnel: TunnelFn = async (target, creds, connectFn, signal) =
 		}
 		debug.log('socks connection opened');
 
-		if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
+		if (signal?.aborted) throw new AbortError('The operation was aborted');
 		socketOwned = true;
 		return { socket, leftover };
 	} finally {

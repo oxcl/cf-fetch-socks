@@ -1,4 +1,4 @@
-import { debug, printWaterfall } from '../debug';
+import { debug } from '../debug';
 import { concatUint8Arrays } from '../utils';
 import { createChunkedDecodingStream, createDecompressionStream, pipeReaderToWriter } from './stream';
 import type { ProxyConnection } from '../connection';
@@ -110,7 +110,7 @@ export function buildFinalResponse(
 ): Response {
 	debug.log(`Response: ${result.status}, content-length: ${result.headers.get('Content-Length') ?? 'chunked'}, encoding: ${result.headers.get('Content-Encoding') ?? 'none'}`);
 	debug.timeEnd('total');
-	printWaterfall();
+	debug.printWaterfall();
 	const ce = result.headers.get('Content-Encoding');
 	const response = streamResponse(conn, result.reader, result.initialBytes, result.status, result.statusText, result.headers, ce);
 	return decorateResponse(response, redirected, url);

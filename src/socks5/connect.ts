@@ -1,9 +1,9 @@
-import { ConnectionRefusedError, ConnectionTimeoutError, Socks5ProtocolError, Socks5ServerError } from '../errors';
+import { AbortError, ConnectionRefusedError, ConnectionTimeoutError, Socks5ProtocolError, Socks5ServerError } from '../errors';
 import type { AddressType } from './address';
 import { encodeAddress } from './address';
 
 function checkTimeout(signal?: AbortSignal, userSignal?: AbortSignal, message = 'SOCKS5 connect timed out'): void {
-	if (userSignal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
+	if (userSignal?.aborted) throw new AbortError('The operation was aborted');
 	if (signal?.aborted) throw new ConnectionTimeoutError(message);
 }
 

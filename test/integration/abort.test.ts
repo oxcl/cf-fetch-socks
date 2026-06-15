@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { AbortError } from '../../src/errors';
 import { makeProxy, socksFetch, HTTPBIN } from './helpers';
 
 describe('abort: timeout', () => {
@@ -8,7 +9,7 @@ describe('abort: timeout', () => {
 			proxy,
 			signal: AbortSignal.timeout(1000),
 		});
-		await expect(req).rejects.toThrow(DOMException);
+		await expect(req).rejects.toThrow(AbortError);
 		await expect(req).rejects.toHaveProperty('name', 'AbortError');
 	});
 });
@@ -19,13 +20,13 @@ describe('abort: pre-aborted', () => {
 		const controller = new AbortController();
 		controller.abort();
 		const start = Date.now();
-		await expect(socksFetch(`${HTTPBIN}/get`, { proxy, signal: controller.signal })).rejects.toThrow(DOMException);
+		await expect(socksFetch(`${HTTPBIN}/get`, { proxy, signal: controller.signal })).rejects.toThrow(AbortError);
 		expect(Date.now() - start).toBeLessThan(1000);
 	});
 });
 
 describe('abort: mid-stream', () => {
-	it.skip('aborting mid-stream stops further reads', async () => {
+	it('aborting mid-stream stops further reads', async () => {
 		const proxy = makeProxy();
 		const controller = new AbortController();
 		const response = await socksFetch(`${HTTPBIN}/stream/100`, {

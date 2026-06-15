@@ -1,8 +1,6 @@
 import type { Socket } from '@cloudflare/workers-types';
 import { connect } from 'cloudflare:sockets';
 
-export type LogFn = (msg: string) => void;
-
 export type ConnectFn = (opts: { hostname: string; port: number }, options?: { secureTransport?: string }) => Socket;
 
 export const defaultConnect: ConnectFn = (opts, options) =>
