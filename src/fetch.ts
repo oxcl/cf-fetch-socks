@@ -23,5 +23,5 @@ export async function socksFetch(urlOrString: string | URL | Request, options: P
 	debug.log(`-> ${request.method} ${request.url} via proxy ${proxy.uri.hostname}`);
 	debug.time('total');
 
-	return await executeRedirectLoop(proxy, request, options.signal);
+	return await executeRedirectLoop(proxy, request, options.signal ?? undefined);
 }

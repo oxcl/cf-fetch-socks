@@ -5,7 +5,7 @@ describe('response headers: duplicates', () => {
 		const proxy = makeProxy();
 		const response = await socksFetch(`${HTTPBIN}/response-headers?Set-Cookie=a%3D1&Set-Cookie=b%3D2`, { proxy });
 		expect(response.status).toBe(200);
-		const cookies = response.headers.getSetCookie();
+		const cookies = (response.headers as Headers & { getSetCookie: () => string[] }).getSetCookie();
 		expect(cookies).toEqual(['a=1', 'b=2']);
 	});
 });

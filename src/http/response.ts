@@ -60,7 +60,7 @@ export function streamResponse(
 	contentEncoding: string | null,
 ): Response {
 	if (NULL_BODY_STATUSES.has(status)) {
-		pipeReaderToWriter(reader, new WritableStream<Uint8Array>(), initialBytes, () => conn.close());
+		pipeReaderToWriter(reader, new WritableStream<Uint8Array>().getWriter(), initialBytes, () => conn.close());
 		headers.delete('Content-Length');
 		return new Response(null, { status, statusText, headers });
 	}

@@ -14,6 +14,6 @@ export async function handler(proxy: Proxy, env: Env): Promise<Response> {
     username: 'wronguser',
     password: 'wrongpass',
   });
-  await badProxy.acquire({ host: 'httpbin.org', port: 80, tls: false });
+  await badProxy.connect({ host: 'httpbin.org', port: 80, tls: false });
   return new Response('OK');
 }

@@ -4,7 +4,7 @@ import type { Proxy } from '../../../src';
 export async function handler(proxy: Proxy, _env?: unknown): Promise<Response> {
   const controller = new AbortController();
   controller.abort();
-  await proxy.acquire(
+  await proxy.connect(
     { host: 'httpbin.org', port: 443, tls: true },
     controller.signal,
   );
