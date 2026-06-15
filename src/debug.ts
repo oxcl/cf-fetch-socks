@@ -82,11 +82,30 @@ export function createDebugger(
 	};
 }
 
-export function printWaterfall(debug: DebugContext | undefined): void {
-	if (!debug) return;
-	debug.end();
+let _debug: DebugContext | undefined;
+
+export const debug: DebugContext = {
+	log(msg: string) { _debug?.log(msg); },
+	time(label: string) { _debug?.time(label); },
+	timeEnd(label: string) { _debug?.timeEnd(label); },
+	dump(bytes: Uint8Array, label: string) { _debug?.dump(bytes, label); },
+	getLogFn(): LogFn { return _debug?.getLogFn() ?? (() => {}); },
+	getEntries(): DebugEntry[] { return _debug?.getEntries() ?? []; },
+	end() { _debug?.end(); },
+};
+
+export function setDebugContext(opt?: boolean | DebugOptions): void {
+	_debug = createDebugger(opt);
+}
+
+export function clearDebugContext(): void {
+	_debug = undefined;
+}
+
+export function printWaterfall(): void {
 	const entries = debug.getEntries();
 	if (entries.length === 0) return;
+	debug.end();
 	debug.log('── waterfall ──');
 	const maxLabel = Math.max(...entries.map((e) => e.label.length), 5);
 	for (const e of entries) {

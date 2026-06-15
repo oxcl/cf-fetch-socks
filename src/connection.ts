@@ -1,6 +1,6 @@
 import type { Socket } from '@cloudflare/workers-types';
+import { debug } from './debug';
 import type { ConnectFn, LogFn } from './socket';
-import type { DebugContext } from './debug';
 import { wrapTls } from './tls';
 
 export interface ProxyTarget {
@@ -22,7 +22,6 @@ export type TunnelFn = (
 	connectFn: ConnectFn,
 	log: LogFn,
 	signal?: AbortSignal,
-	debug?: DebugContext,
 ) => Promise<{ socket: Socket; leftover: Uint8Array }>;
 
 export interface ProxyConnection {
@@ -40,17 +39,16 @@ export async function openConnection(
 	connectFn: ConnectFn,
 	log: LogFn,
 	signal?: AbortSignal,
-	debug?: DebugContext,
 ): Promise<ProxyConnection> {
-	debug?.time('tunnel');
-	const { socket, leftover } = await tunnelFn(target, creds, connectFn, log, signal, debug);
-	debug?.timeEnd('tunnel');
+	debug.time('tunnel');
+	const { socket, leftover } = await tunnelFn(target, creds, connectFn, log, signal);
+	debug.timeEnd('tunnel');
 
 	if (!target.tls) {
 		return wrapRaw(socket, target);
 	}
 
-	return wrapTls(socket, leftover, target, log, signal, debug);
+	return wrapTls(socket, leftover, target, log, signal);
 }
 
 function wrapRaw(socket: Socket, target: ProxyTarget): ProxyConnection {

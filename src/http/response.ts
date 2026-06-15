@@ -1,6 +1,6 @@
+import { debug, printWaterfall } from '../debug';
 import { concatUint8Arrays } from '../utils';
 import { createGunzipStream, pipeReaderToWriter } from './stream';
-import { printWaterfall, type DebugContext } from '../debug';
 import type { ProxyConnection } from '../connection';
 
 export function parseResponseHeaders(
@@ -73,25 +73,23 @@ export function streamResponse(
 }
 
 export function buildFinalResponse(
-	debug: DebugContext | undefined,
 	conn: ProxyConnection,
 	result: { reader: ReadableStreamDefaultReader<Uint8Array>; status: number; statusText: string; headers: Headers; initialBytes: Uint8Array },
 ): Response {
-	debug?.log(`Response: ${result.status}, content-length: ${result.headers.get('Content-Length') ?? 'chunked'}, encoding: ${result.headers.get('Content-Encoding') ?? 'none'}`);
-	debug?.timeEnd('total');
-	printWaterfall(debug);
+	debug.log(`Response: ${result.status}, content-length: ${result.headers.get('Content-Length') ?? 'chunked'}, encoding: ${result.headers.get('Content-Encoding') ?? 'none'}`);
+	debug.timeEnd('total');
+	printWaterfall();
 	const ce = result.headers.get('Content-Encoding');
 	return streamResponse(conn, result.reader, result.initialBytes, result.status, result.statusText, result.headers, ce === 'gzip');
 }
 
 export function buildRedirectWithoutLocationResponse(
-	debug: DebugContext | undefined,
 	free: () => void,
 	result: { status: number; statusText: string; headers: Headers; initialBytes: Uint8Array },
 ): Response {
-	debug?.log('Redirect without Location header');
-	debug?.timeEnd('total');
-	debug?.end();
+	debug.log('Redirect without Location header');
+	debug.timeEnd('total');
+	debug.end();
 	free();
 	return new Response(result.initialBytes, { status: result.status, statusText: result.statusText, headers: result.headers });
 }

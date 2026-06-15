@@ -1,6 +1,6 @@
+import { debug } from './debug';
 import type { ConnectFn, LogFn } from './socket';
 import { defaultConnect } from './socket';
-import type { DebugContext } from './debug';
 import { openConnection, type ProxyConnection, type ProxyTarget, type ProxyCredentials, type TunnelFn } from './connection';
 import { socks5Tunnel } from './socks5/index';
 import { parseProxyUri } from './utils';
@@ -11,7 +11,6 @@ export async function ensureConnection(
 	url: URL,
 	activeConn: ProxyConnection | null,
 	activeReader: ReadableStreamDefaultReader<Uint8Array> | null,
-	debug: DebugContext | undefined,
 ): Promise<{ conn: ProxyConnection; reader: ReadableStreamDefaultReader<Uint8Array> | null }> {
 	const isTls = url.protocol === 'https:';
 	const port = url.port ? Number(url.port) : isTls ? 443 : 80;
@@ -23,7 +22,7 @@ export async function ensureConnection(
 		if (activeReader) activeReader.releaseLock();
 	}
 	const conOpts: ProxyTarget = { host: url.hostname, port, tls: isTls };
-	const conn = await proxy.connect(conOpts, undefined, debug);
+	const conn = await proxy.connect(conOpts, undefined);
 	return { conn, reader: null };
 }
 export class Proxy {
@@ -74,21 +73,21 @@ export class Proxy {
 		return this._uri;
 	}
 
-	async connect(target: ProxyTarget, signal?: AbortSignal, debug?: DebugContext): Promise<ProxyConnection> {
-		return this.pooled ? this.acquireConnection(target, signal, debug) : this.acquire(target, signal, debug);
+	async connect(target: ProxyTarget, signal?: AbortSignal): Promise<ProxyConnection> {
+		return this.pooled ? this.acquireConnection(target, signal) : this.acquire(target, signal);
 	}
 
 	release(conn: ProxyConnection): void {
 		this.pooled ? this.revokeConnection(conn) : conn.close();
 	}
 
-	private async acquire(target: ProxyTarget, signal?: AbortSignal, debug?: DebugContext): Promise<ProxyConnection> {
+	private async acquire(target: ProxyTarget, signal?: AbortSignal): Promise<ProxyConnection> {
 		this.log(`Opening new connection to ${target.host}:${target.port}`);
-		debug?.log(`Opening new connection to ${target.host}:${target.port}`);
-		return openConnection(this.tunnelFn, this.opts, target, this.connectFn, this.log, signal, debug);
+		debug.log(`Opening new connection to ${target.host}:${target.port}`);
+		return openConnection(this.tunnelFn, this.opts, target, this.connectFn, this.log, signal);
 	}
 
-	async acquireConnection(target: ProxyTarget, signal?: AbortSignal, debug?: DebugContext): Promise<ProxyConnection> {
+	async acquireConnection(target: ProxyTarget, signal?: AbortSignal): Promise<ProxyConnection> {
 		const key = `${target.host}:${target.port}`;
 		const conns = this.pool.get(key) ?? [];
 		const idx = conns.findIndex((c) => !c.closed && !this.busy.has(c));
@@ -96,11 +95,11 @@ export class Proxy {
 			const [conn] = conns.splice(idx, 1);
 			if (conns.length === 0) this.pool.delete(key);
 			this.busy.add(conn);
-			debug?.log(`Pool HIT (${conns.length} idle remaining)`);
+			debug.log(`Pool HIT (${conns.length} idle remaining)`);
 			return conn;
 		}
-		debug?.log('Pool MISS');
-		const conn = await this.acquire(target, signal, debug);
+		debug.log('Pool MISS');
+		const conn = await this.acquire(target, signal);
 		this.busy.add(conn);
 		return conn;
 	}

@@ -1,3 +1,4 @@
+export { debug, setDebugContext, clearDebugContext } from './debug';
 export { socksFetch } from './fetch';
 export type { DebugOptions } from './debug';
 export type { ProxyFetchOptions } from './fetch';

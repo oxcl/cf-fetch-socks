@@ -1,7 +1,7 @@
 import type { Socket } from '@cloudflare/workers-types';
+import { debug } from '../debug';
 import type { ConnectFn, LogFn } from '../socket';
 import type { ProxyTarget, ProxyCredentials, TunnelFn } from '../connection';
-import type { DebugContext } from '../debug';
 import {
 	ConnectionRefusedError,
 	ConnectionTimeoutError,
@@ -37,30 +37,30 @@ function connectProxySocket(
 	}
 }
 
-export const socks5Tunnel: TunnelFn = async (target, creds, connectFn, log, signal, debug) => {
+export const socks5Tunnel: TunnelFn = async (target, creds, connectFn, log, signal) => {
 	const { username, password, hostname, port } = creds;
 
-	debug?.time('tcp.connect');
+	debug.time('tcp.connect');
 	const socket = connectProxySocket(hostname, port, connectFn, signal);
-	debug?.timeEnd('tcp.connect');
+	debug.timeEnd('tcp.connect');
 
 	const writer = socket.writable.getWriter() as unknown as WritableStreamDefaultWriter<Uint8Array>;
 	const reader = socket.readable.getReader() as unknown as ReadableStreamDefaultReader<Uint8Array>;
 	let socketOwned = false;
 
 	try {
-		debug?.time('socks5.greet');
+		debug.time('socks5.greet');
 		await sendGreeting(writer);
 		const authMethod = await receiveGreeting(reader);
-		debug?.timeEnd('socks5.greet');
+		debug.timeEnd('socks5.greet');
 		log('sent socks greeting');
 
 		if (authMethod === 0x02) {
 			log('socks server needs auth');
 			if (!username || !password) throw new Socks5AuthError('No credentials provided');
-			debug?.time('socks5.auth');
+			debug.time('socks5.auth');
 			await authenticate(writer, reader, username, password);
-			debug?.timeEnd('socks5.auth');
+			debug.timeEnd('socks5.auth');
 		}
 
 		const addressType = getAddressType(target.host);
@@ -71,11 +71,11 @@ export const socks5Tunnel: TunnelFn = async (target, creds, connectFn, log, sign
 		connectSignal.addEventListener('abort', onAbort);
 		let leftover: Uint8Array;
 		try {
-			debug?.time('socks5.connect');
+			debug.time('socks5.connect');
 			await sendConnectRequest(writer, target.host, target.port, addressType);
 			const reply = await readConnectReply(reader, connectSignal);
 			leftover = reply.leftover;
-			debug?.timeEnd('socks5.connect');
+			debug.timeEnd('socks5.connect');
 		} finally {
 			connectSignal.removeEventListener('abort', onAbort);
 		}
