@@ -30,7 +30,7 @@ export class Proxy {
 				username: parsed.username,
 				password: parsed.password,
 			},
-			undefined,
+			false,
 		);
 		proxy._uri = parsed.url;
 		Proxy.cache.set(uri, proxy);
@@ -50,6 +50,22 @@ export class Proxy {
 
 	get uri(): URL {
 		return this._uri;
+	}
+
+	get isPooled(): boolean {
+		return this.pooled;
+	}
+
+	get idleCount(): number {
+		let count = 0;
+		for (const conns of this.pool.values()) {
+			count += conns.filter((c) => !c.closed && !this.busy.has(c)).length;
+		}
+		return count;
+	}
+
+	static clearCache(): void {
+		Proxy.cache.clear();
 	}
 
 	async connect(target: ProxyTarget, signal?: AbortSignal): Promise<ProxyConnection> {
