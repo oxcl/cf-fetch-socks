@@ -133,6 +133,7 @@ export async function wrapTls(
 		get readable() {
 			return makeTlsReadable(s, handshakeDone, close);
 		},
+		reader: null,
 		close,
 	};
 }

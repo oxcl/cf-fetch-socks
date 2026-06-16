@@ -30,6 +30,7 @@ export interface ProxyConnection {
 	readonly closed: boolean;
 	write(data: Uint8Array): Promise<void>;
 	readable: ReadableStream<Uint8Array>;
+	reader: ReadableStreamDefaultReader<Uint8Array> | null;
 	close(): void;
 }
 
@@ -67,6 +68,7 @@ function wrapRaw(socket: Socket, target: ProxyTarget): ProxyConnection {
 			await writer.write(data);
 		},
 		readable: socket.readable as unknown as ReadableStream<Uint8Array>,
+		reader: null,
 		close() {
 			if (closed) return;
 			closed = true;

@@ -1,11 +1,12 @@
+import type { ProxyConnection } from '../connection';
 import type { PerformResult } from './types';
 
-export async function drainAndGetLocation(result: PerformResult): Promise<string | null> {
+export async function drainAndGetLocation(conn: ProxyConnection, result: PerformResult): Promise<string | null> {
   const cl = result.headers.get('Content-Length');
   if (cl) {
     let drained = result.initialBytes.length;
     while (drained < Number(cl)) {
-      const { value, done } = await result.reader.read();
+      const { value, done } = await conn.reader!.read();
       if (done) break;
       drained += value.length;
     }

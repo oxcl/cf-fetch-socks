@@ -2,6 +2,7 @@ import { debug } from '../debug';
 import { readHeaders } from './response';
 import { checkProxyError } from '../errors';
 import type { ProxyConnection } from '../connection';
+import type { PerformResult } from '../executor/types';
 
 function serializeBody(body: BodyInit | null | undefined): Uint8Array | undefined {
 	if (body == null) return undefined;
@@ -65,13 +66,12 @@ export async function drainBodyStream(stream: ReadableStream<Uint8Array>): Promi
 export async function performRequest(
 	conn: ProxyConnection,
 	request: Request,
-	reader?: ReadableStreamDefaultReader<Uint8Array> | null,
 	bodyBytes?: Uint8Array,
 	signal?: AbortSignal,
-) {
+): Promise<PerformResult> {
 	if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
 
-	return new Promise<{ reader: ReadableStreamDefaultReader<Uint8Array>; status: number; statusText: string; headers: Headers; initialBytes: Uint8Array }>((resolve, reject) => {
+	return new Promise<PerformResult>((resolve, reject) => {
 		const onAbort = () => {
 			reject(new DOMException('The operation was aborted', 'AbortError'));
 		};
@@ -87,18 +87,16 @@ export async function performRequest(
 				await conn.write(reqBytes);
 				debug.timeEnd('http.send');
 
-				if (!reader) {
-					reader = conn.readable.getReader();
-				}
+				conn.reader = conn.readable.getReader();
 				debug.time('http.ttfb');
-				const parsed = await readHeaders(reader);
+				const parsed = await readHeaders(conn.reader);
 				debug.timeEnd('http.ttfb');
 
 				checkProxyError(parsed.status, new TextDecoder().decode(parsed.initialBytes));
 				debug.log(`<- ${parsed.status} ${parsed.statusText}`);
 
 				signal?.removeEventListener('abort', onAbort);
-				resolve({ reader, ...parsed });
+				resolve(parsed);
 			} catch (e) {
 				signal?.removeEventListener('abort', onAbort);
 				reject(e);

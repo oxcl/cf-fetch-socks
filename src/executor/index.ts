@@ -35,7 +35,7 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 		);
 
 		try {
-			const result = await http.performRequest(conn, request, null, bodyPayload, signal);
+			const result = await http.performRequest(conn, request, bodyPayload, signal);
 
 			if (!http.isRedirect(result.status)) return http.buildFinalResponse(proxy, conn, result, redirected, request.url, signal, request.method);
 			if (redirectMode === 'manual') return http.buildManualResponse(proxy, conn, result);
@@ -43,13 +43,13 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 
 			redirected = true;
 
-			const location = await drainAndGetLocation(result);
+			const location = await drainAndGetLocation(conn, result);
 			if (!location) return http.buildNoLocationResponse(proxy, conn, result);
 
 			const next = buildNextRequest(request, bodyPayload, result, location, url);
 			request = next.request;
 			bodyPayload = next.bodyBytes;
-			result.reader.releaseLock();
+			conn.reader!.releaseLock();
 			proxy.release(conn);
 		} catch (e) {
 			debug.log(`Error: ${e instanceof Error ? e.message : String(e)}`);

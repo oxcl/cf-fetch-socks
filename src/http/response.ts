@@ -53,7 +53,6 @@ const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
 
 export function streamResponse(
 	conn: ProxyConnection,
-	reader: ReadableStreamDefaultReader<Uint8Array>,
 	initialBytes: Uint8Array,
 	status: number,
 	statusText: string,
@@ -62,7 +61,7 @@ export function streamResponse(
 	signal?: AbortSignal,
 ): Response {
 	if (NULL_BODY_STATUSES.has(status)) {
-		const stream = createPlainStream(reader, initialBytes, undefined, () => conn.close());
+		const stream = createPlainStream(conn, initialBytes, undefined);
 		drainReaderWithStream(stream);
 		headers.delete('Content-Length');
 		return new Response(null, { status, statusText, headers });
@@ -78,7 +77,7 @@ export function streamResponse(
 
 	if (isChunked && contentEncoding) {
 		headers.delete('Content-Encoding');
-		const chunked = createChunkedDecodingStream(reader, initialBytes, undefined, signal);
+		const chunked = createChunkedDecodingStream(conn, initialBytes, signal);
 		return new Response(
 			createDecompressionStream(chunked.getReader(), new Uint8Array(0), undefined, contentEncoding, () => conn.close(), signal),
 			{ status, statusText, headers },
@@ -88,20 +87,20 @@ export function streamResponse(
 	if (contentEncoding) {
 		headers.delete('Content-Encoding');
 		return new Response(
-			createDecompressionStream(reader, initialBytes, contentLength, contentEncoding, () => conn.close(), signal),
+			createDecompressionStream(conn.reader!, initialBytes, contentLength, contentEncoding, () => conn.close(), signal),
 			{ status, statusText, headers },
 		);
 	}
 
 	if (isChunked) {
 		return new Response(
-			createChunkedDecodingStream(reader, initialBytes, () => conn.close(), signal),
+			createChunkedDecodingStream(conn, initialBytes, signal),
 			{ status, statusText, headers },
 		);
 	}
 
 	return new Response(
-		createPlainStream(reader, initialBytes, contentLength, () => conn.close(), signal),
+		createPlainStream(conn, initialBytes, contentLength, signal),
 		{ status, statusText, headers },
 	);
 }
@@ -114,7 +113,7 @@ async function drainReaderWithStream(stream: ReadableStream<Uint8Array>): Promis
 	}
 }
 
-type Result = { reader: ReadableStreamDefaultReader<Uint8Array>; status: number; statusText: string; headers: Headers; initialBytes: Uint8Array };
+type Result = { status: number; statusText: string; headers: Headers; initialBytes: Uint8Array };
 
 export function buildFinalResponse(
 	proxy: Proxy,
@@ -126,7 +125,7 @@ export function buildFinalResponse(
 	method?: string,
 ): Response {
 	if (method === 'HEAD') {
-		result.reader.releaseLock();
+		conn.reader!.releaseLock();
 		proxy.release(conn);
 		return new Response(null, { status: result.status, statusText: result.statusText, headers: result.headers });
 	}
@@ -135,7 +134,7 @@ export function buildFinalResponse(
 	debug.timeEnd('total');
 	debug.printWaterfall();
 	const ce = result.headers.get('Content-Encoding');
-	const response = streamResponse(conn, result.reader, result.initialBytes, result.status, result.statusText, result.headers, ce, signal);
+	const response = streamResponse(conn, result.initialBytes, result.status, result.statusText, result.headers, ce, signal);
 	return decorateResponse(response, redirected, url);
 }
 

@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import zlib from 'node:zlib';
+import type { ProxyConnection } from '../connection';
 
 export async function drainReader(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
 	while (true) {
@@ -27,11 +28,11 @@ function extendBuffer(existing: Uint8Array, chunk: Uint8Array): Uint8Array {
 }
 
 export function createChunkedDecodingStream(
-	reader: ReadableStreamDefaultReader<Uint8Array>,
+	conn: ProxyConnection,
 	initialBytes: Uint8Array,
-	cleanup?: () => void,
 	signal?: AbortSignal,
 ): ReadableStream<Uint8Array> {
+	const reader = conn.reader!;
 	const CRLF = [0x0D, 0x0A];
 	const decoder = new TextDecoder();
 	let buffer = initialBytes;
@@ -42,7 +43,6 @@ export function createChunkedDecodingStream(
 			while (true) {
 				if (signal?.aborted) {
 					controller.close();
-					cleanup?.();
 					return;
 				}
 				const crlfIdx = indexOfSeq(buffer, CRLF, offset);
@@ -50,7 +50,6 @@ export function createChunkedDecodingStream(
 					const { value, done } = await reader.read();
 					if (done) {
 						controller.close();
-						cleanup?.();
 						return;
 					}
 					buffer = extendBuffer(buffer, value);
@@ -63,7 +62,6 @@ export function createChunkedDecodingStream(
 				const payloadStart = crlfIdx + 2;
 				if (chunkSize === 0) {
 					controller.close();
-					cleanup?.();
 					return;
 				}
 				const chunkEnd = payloadStart + chunkSize;
@@ -71,7 +69,6 @@ export function createChunkedDecodingStream(
 					const { value, done } = await reader.read();
 					if (done) {
 						controller.close();
-						cleanup?.();
 						return;
 					}
 					buffer = extendBuffer(buffer, value);
@@ -83,7 +80,6 @@ export function createChunkedDecodingStream(
 			}
 		},
 		cancel() {
-			cleanup?.();
 			reader.cancel().catch(() => {});
 		},
 	}, { highWaterMark: 0 });
@@ -140,12 +136,12 @@ export function createDecompressionStream(
 }
 
 export function createPlainStream(
-	reader: ReadableStreamDefaultReader<Uint8Array>,
+	conn: ProxyConnection,
 	initialBytes: Uint8Array,
 	contentLength: number | undefined,
-	cleanup: () => void,
 	signal?: AbortSignal,
 ): ReadableStream<Uint8Array> {
+	const reader = conn.reader!;
 	let remaining = contentLength !== undefined ? contentLength - initialBytes.length : -1;
 	let initialSent = false;
 
@@ -153,7 +149,6 @@ export function createPlainStream(
 		async pull(controller) {
 			if (signal?.aborted) {
 				controller.close();
-				cleanup();
 				return;
 			}
 			if (!initialSent) {
@@ -165,25 +160,22 @@ export function createPlainStream(
 			}
 			if (remaining === 0) {
 				controller.close();
-				cleanup();
 				return;
 			}
 			const { value, done } = await reader.read();
 			if (signal?.aborted) {
 				controller.close();
-				cleanup();
 				return;
 			}
 			if (done) {
 				controller.close();
-				cleanup();
 				return;
 			}
 			controller.enqueue(value);
 			if (remaining > 0) remaining -= value.length;
 		},
 		cancel() {
-			cleanup();
+			conn.close();
 			reader.cancel().catch(() => {});
 		},
 	});
