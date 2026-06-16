@@ -8,6 +8,7 @@ import { parseProxyUri } from './utils';
 export type ProxyOptions = ProxyCredentials;
 export class Proxy {
 	private static cache = new Map<string, Proxy>();
+	private static acquired = new Map<string, Proxy>();
 
 	private tunnelFn: TunnelFn;
 	private opts: ProxyCredentials;
@@ -64,8 +65,28 @@ export class Proxy {
 		return count;
 	}
 
+	static acquireProxy(uri: string): Proxy {
+		const existing = Proxy.acquired.get(uri);
+		if (existing) return existing;
+		const parsed = parseProxyUri(uri);
+		const proxy = new Proxy(
+			socks5Tunnel,
+			{
+				hostname: parsed.hostname,
+				port: parsed.port,
+				username: parsed.username,
+				password: parsed.password,
+			},
+			true,
+		);
+		proxy._uri = parsed.url;
+		Proxy.acquired.set(uri, proxy);
+		return proxy;
+	}
+
 	static clearCache(): void {
 		Proxy.cache.clear();
+		Proxy.acquired.clear();
 	}
 
 	async connect(target: ProxyTarget, signal?: AbortSignal): Promise<ProxyConnection> {
