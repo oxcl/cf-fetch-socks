@@ -120,11 +120,10 @@ export function buildFinalResponse(
 	conn: ProxyConnection,
 	result: Result,
 	redirected = false,
-	url?: string,
+	request: Request,
 	signal?: AbortSignal,
-	method?: string,
 ): Response {
-	if (method === 'HEAD') {
+	if (request.method === 'HEAD') {
 		conn.reader!.releaseLock();
 		proxy.release(conn);
 		return new Response(null, { status: result.status, statusText: result.statusText, headers: result.headers });
@@ -135,7 +134,7 @@ export function buildFinalResponse(
 	debug.printWaterfall();
 	const ce = result.headers.get('Content-Encoding');
 	const response = streamResponse(conn, result.initialBytes, result.status, result.statusText, result.headers, ce, signal);
-	return decorateResponse(response, redirected, url);
+	return decorateResponse(response, redirected, request.url);
 }
 
 function decorateResponse(response: Response, redirected: boolean, url?: string): Response {

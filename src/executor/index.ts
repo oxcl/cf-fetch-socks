@@ -37,7 +37,7 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 		try {
 			const result = await http.performRequest(conn, request, bodyPayload, signal);
 
-			if (!http.isRedirect(result.status)) return http.buildFinalResponse(proxy, conn, result, redirected, request.url, signal, request.method);
+			if (!http.isRedirect(result.status)) return http.buildFinalResponse(proxy, conn, result, redirected, request, signal);
 			if (redirectMode === 'manual') return http.buildManualResponse(proxy, conn, result);
 			if (redirectMode === 'error') http.throwRedirectError(conn, result);
 
