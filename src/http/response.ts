@@ -1,5 +1,5 @@
 import { debug } from '../debug';
-import { concatUint8Arrays } from '../utils';
+import { concatUint8Arrays, drainReader } from '../utils';
 import { createChunkedDecodingStream, createDecompressionStream, createPlainStream } from './stream';
 import type { Proxy } from '../proxy';
 import type { ProxyConnection } from '../connection';
@@ -62,7 +62,7 @@ export function streamResponse(
 ): Response {
 	if (NULL_BODY_STATUSES.has(status)) {
 		const stream = createPlainStream(conn, initialBytes, undefined);
-		drainReaderWithStream(stream);
+		drainReader(stream.getReader());
 		headers.delete('Content-Length');
 		return new Response(null, { status, statusText, headers });
 	}
@@ -103,14 +103,6 @@ export function streamResponse(
 		createPlainStream(conn, initialBytes, contentLength, signal),
 		{ status, statusText, headers },
 	);
-}
-
-async function drainReaderWithStream(stream: ReadableStream<Uint8Array>): Promise<void> {
-	const reader = stream.getReader();
-	while (true) {
-		const { done } = await reader.read();
-		if (done) break;
-	}
 }
 
 type Result = { status: number; statusText: string; headers: Headers; initialBytes: Uint8Array };

@@ -1,6 +1,5 @@
 import {
 	buildRequest,
-	drainBodyStream,
 	performRequest,
 } from './request';
 import {
@@ -10,7 +9,6 @@ import {
 	buildFinalResponse,
 } from './response';
 import {
-	drainReader,
 	createChunkedDecodingStream,
 	createDecompressionStream,
 	createPlainStream,
@@ -25,13 +23,11 @@ import { isRedirect } from './utils';
 
 export const http = {
 	buildRequest,
-	drainBodyStream,
 	performRequest,
 	parseResponseHeaders,
 	readHeaders,
 	streamResponse,
 	buildFinalResponse,
-	drainReader,
 	createChunkedDecodingStream,
 	createDecompressionStream,
 	createPlainStream,

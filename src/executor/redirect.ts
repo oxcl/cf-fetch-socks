@@ -1,7 +1,9 @@
 import type { ProxyConnection } from '../connection';
 import type { PerformResult } from './types';
+import { createChunkedDecodingStream } from '../http/stream';
+import { drainReader } from '../utils';
 
-export async function drainAndGetLocation(conn: ProxyConnection, result: PerformResult): Promise<string | null> {
+export async function drainConnectionBody(conn: ProxyConnection, result: PerformResult): Promise<void> {
   const cl = result.headers.get('Content-Length');
   if (cl) {
     let drained = result.initialBytes.length;
@@ -10,8 +12,10 @@ export async function drainAndGetLocation(conn: ProxyConnection, result: Perform
       if (done) break;
       drained += value.length;
     }
+    return;
   }
-  return result.headers.get('Location');
+  const stream = createChunkedDecodingStream(conn, result.initialBytes);
+  await drainReader(stream.getReader());
 }
 
 export function buildNextRequest(request: Request, bodyBytes: Uint8Array | undefined, result: PerformResult, location: string, url: URL): { request: Request; bodyBytes: Uint8Array | undefined } {

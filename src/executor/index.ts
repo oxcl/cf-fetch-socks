@@ -3,7 +3,8 @@ import { debug } from '../debug';
 import { MAX_REDIRECT } from '../constants';
 import type { Proxy } from '../proxy';
 import { http } from '../http';
-import { buildNextRequest, drainAndGetLocation } from './redirect';
+import { buildNextRequest, drainConnectionBody } from './redirect';
+import { drainToBuffer } from '../utils';
 
 export type { PerformResult } from './types';
 
@@ -22,7 +23,7 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 
 		const url = new URL(request.url);
 		if (request.body && !bodyPayload) {
-			bodyPayload = await http.drainBodyStream(request.body);
+			bodyPayload = await drainToBuffer(request.body);
 		}
 
 		const conn = await proxy.connect(
@@ -43,7 +44,8 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 
 			redirected = true;
 
-			const location = await drainAndGetLocation(conn, result);
+			await drainConnectionBody(conn, result);
+			const location = result.headers.get('Location');
 			if (!location) return http.buildNoLocationResponse(proxy, conn, result);
 
 			const next = buildNextRequest(request, bodyPayload, result, location, url);

@@ -2,13 +2,6 @@
 import zlib from 'node:zlib';
 import type { ProxyConnection } from '../connection';
 
-export async function drainReader(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
-	while (true) {
-		const { done } = await reader.read();
-		if (done) break;
-	}
-}
-
 function indexOfSeq(buffer: Uint8Array, seq: number[], start: number): number {
 	for (let i = start; i <= buffer.length - seq.length; i++) {
 		let match = true;

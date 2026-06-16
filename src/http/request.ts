@@ -44,25 +44,6 @@ export function buildRequest(target: URL, method: string, headers?: HeadersInit,
 	return headerBytes;
 }
 
-export async function drainBodyStream(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
-	const reader = stream.getReader();
-	const chunks: Uint8Array[] = [];
-	let len = 0;
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		chunks.push(value);
-		len += value.length;
-	}
-	const buf = new Uint8Array(len);
-	let off = 0;
-	for (const c of chunks) {
-		buf.set(c, off);
-		off += c.length;
-	}
-	return buf;
-}
-
 export async function performRequest(
 	conn: ProxyConnection,
 	request: Request,
