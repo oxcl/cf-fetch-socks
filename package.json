@@ -1,6 +1,6 @@
 {
 	"name": "cf-fetch-socks",
-	"version": "0.1.0",
+	"version": "0.1.2",
 	"description": "SOCKS5 proxy fetch for Cloudflare Workers — with TLS, pooling, redirects, and decompression",
 	"license": "MIT",
 	"type": "module",

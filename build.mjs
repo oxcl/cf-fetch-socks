@@ -5,6 +5,7 @@ await esbuild.build({
 	outdir: './dist',
 	format: 'esm',
 	platform: 'browser',
+	bundle: true,
 	packages: 'external',
 	sourcemap: 'external',
 	minify: false,
