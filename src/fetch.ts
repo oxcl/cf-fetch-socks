@@ -13,14 +13,16 @@ export interface ProxyFetchOptions extends RequestInit {
 export async function socksFetch(urlOrString: string | URL | Request, options: ProxyFetchOptions): Promise<Response> {
 	debug.setContext(options.debug);
 
-	if (options.signal?.aborted) {
+	const signal = options.signal ?? (urlOrString instanceof Request ? urlOrString.signal : undefined);
+
+	if (signal?.aborted) {
 		throw new AbortError('The operation was aborted');
 	}
 
 	const proxy = typeof options.proxy === 'string' ? Proxy.obtainProxy(options.proxy) : options.proxy;
-	const request = await buildRequestObject(urlOrString, options);
+	const request = await buildRequestObject(urlOrString, { ...options, signal });
 
 	debug.log(`-> ${request.method} ${request.url} via proxy ${proxy.uri.hostname}`);
 	debug.time('total');
-	return await executeRedirectLoop(proxy, request, options.signal ?? undefined);
+	return await executeRedirectLoop(proxy, request, signal);
 }

@@ -25,8 +25,8 @@ export function buildNextRequest(request: Request, bodyBytes: Uint8Array | undef
   if (nextUrl.origin !== url.origin) {
     nextHeaders.delete('Authorization');
   }
-  return {
-    request: new Request(nextUrl, { method: nextMethod, headers: nextHeaders, body: nextBody }),
-    bodyBytes: nextBodyBytes,
-  };
+	return {
+		request: new Request(nextUrl, { method: nextMethod, headers: nextHeaders, body: nextBody, signal: request.signal }),
+		bodyBytes: nextBodyBytes,
+	};
 }

@@ -17,7 +17,7 @@ export async function buildRequestObject(
 	if (body instanceof ReadableStream) {
 		body = await drainStream(body);
 	}
-	return new Request(url, { method, headers, body, redirect });
+	return new Request(url, { method, headers, body, redirect, signal: init?.signal });
 }
 
 async function drainStream(stream: ReadableStream): Promise<Uint8Array> {
