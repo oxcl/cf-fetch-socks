@@ -1,11 +1,8 @@
 import { debug } from '../debug';
-import type { Proxy } from '../proxy';
 import type { ProxyConnection } from '../connection';
 import type { PerformResult } from './types';
 
-export function buildManualResponse(proxy: Proxy, conn: ProxyConnection, result: PerformResult): Response {
-	conn.reader!.releaseLock();
-	proxy.release(conn);
+export function buildManualResponse(result: PerformResult): Response {
 	return new Response(result.initialBytes, { status: result.status, statusText: result.statusText, headers: result.headers });
 }
 
@@ -15,9 +12,7 @@ export function throwRedirectError(conn: ProxyConnection, result: PerformResult)
 	throw new TypeError('URI requested responds with a redirect');
 }
 
-export function buildNoLocationResponse(proxy: Proxy, conn: ProxyConnection, result: PerformResult): Response {
-	conn.reader!.releaseLock();
-	proxy.release(conn);
+export function buildNoLocationResponse(result: PerformResult): Response {
 	debug.log('Redirect without Location header');
 	debug.timeEnd('total');
 	debug.end();

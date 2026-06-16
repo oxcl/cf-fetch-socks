@@ -1,7 +1,6 @@
 import { debug } from '../debug';
 import { concatUint8Arrays, drainReader } from '../utils';
 import { createChunkedDecodingStream, createDecompressionStream, createPlainStream } from './stream';
-import type { Proxy } from '../proxy';
 import type { ProxyConnection } from '../connection';
 
 export function parseResponseHeaders(
@@ -108,7 +107,6 @@ export function streamResponse(
 type Result = { status: number; statusText: string; headers: Headers; initialBytes: Uint8Array };
 
 export function buildFinalResponse(
-	proxy: Proxy,
 	conn: ProxyConnection,
 	result: Result,
 	redirected = false,
@@ -116,8 +114,6 @@ export function buildFinalResponse(
 	signal?: AbortSignal,
 ): Response {
 	if (request.method === 'HEAD') {
-		conn.reader!.releaseLock();
-		proxy.release(conn);
 		return new Response(null, { status: result.status, statusText: result.statusText, headers: result.headers });
 	}
 
