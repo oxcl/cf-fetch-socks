@@ -1,6 +1,7 @@
 import { debug } from '../debug';
 import { concatUint8Arrays } from '../utils';
 import { createChunkedDecodingStream, createDecompressionStream, createPlainStream } from './stream';
+import type { Proxy } from '../proxy';
 import type { ProxyConnection } from '../connection';
 
 export function parseResponseHeaders(
@@ -113,13 +114,23 @@ async function drainReaderWithStream(stream: ReadableStream<Uint8Array>): Promis
 	}
 }
 
+type Result = { reader: ReadableStreamDefaultReader<Uint8Array>; status: number; statusText: string; headers: Headers; initialBytes: Uint8Array };
+
 export function buildFinalResponse(
+	proxy: Proxy,
 	conn: ProxyConnection,
-	result: { reader: ReadableStreamDefaultReader<Uint8Array>; status: number; statusText: string; headers: Headers; initialBytes: Uint8Array },
+	result: Result,
 	redirected = false,
 	url?: string,
 	signal?: AbortSignal,
+	method?: string,
 ): Response {
+	if (method === 'HEAD') {
+		result.reader.releaseLock();
+		proxy.release(conn);
+		return new Response(null, { status: result.status, statusText: result.statusText, headers: result.headers });
+	}
+
 	debug.log(`Response: ${result.status}, content-length: ${result.headers.get('Content-Length') ?? 'chunked'}, encoding: ${result.headers.get('Content-Encoding') ?? 'none'}`);
 	debug.timeEnd('total');
 	debug.printWaterfall();

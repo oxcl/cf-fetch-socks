@@ -1,19 +1,9 @@
 import { AbortError } from '../errors';
 import { debug } from '../debug';
 import { MAX_REDIRECT } from '../constants';
-import { drainBodyStream as drainBodyStreamIntoUint8Array } from '../http/request';
-import { buildFinalResponse } from '../http/response';
 import type { Proxy } from '../proxy';
-import { performRequest } from '../http/request';
+import { http } from '../http';
 import { buildNextRequest, drainAndGetLocation } from './redirect';
-import { isRedirect } from './utils';
-import {
-	buildHeadResponse,
-	buildManualResponse,
-	throwRedirectError,
-	buildNoLocationResponse,
-	buildTooManyRedirectsResponse,
-} from './response';
 
 export type { PerformResult } from './types';
 
@@ -32,7 +22,7 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 
 		const url = new URL(request.url);
 		if (request.body && !bodyPayload) {
-			bodyPayload = await drainBodyStreamIntoUint8Array(request.body);
+			bodyPayload = await http.drainBodyStream(request.body);
 		}
 
 		const conn = await proxy.connect(
@@ -45,17 +35,16 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 		);
 
 		try {
-			const result = await performRequest(conn, request, null, bodyPayload, signal);
+			const result = await http.performRequest(conn, request, null, bodyPayload, signal);
 
-			if (request.method === 'HEAD') return buildHeadResponse(proxy, conn, result);
-			if (!isRedirect(result.status)) return buildFinalResponse(conn, result, redirected, request.url, signal);
-			if (redirectMode === 'manual') return buildManualResponse(proxy, conn, result);
-			if (redirectMode === 'error') throwRedirectError(conn, result);
+			if (!http.isRedirect(result.status)) return http.buildFinalResponse(proxy, conn, result, redirected, request.url, signal, request.method);
+			if (redirectMode === 'manual') return http.buildManualResponse(proxy, conn, result);
+			if (redirectMode === 'error') http.throwRedirectError(conn, result);
 
 			redirected = true;
 
 			const location = await drainAndGetLocation(result);
-			if (!location) return buildNoLocationResponse(proxy, conn, result);
+			if (!location) return http.buildNoLocationResponse(proxy, conn, result);
 
 			const next = buildNextRequest(request, bodyPayload, result, location, url);
 			request = next.request;
@@ -70,5 +59,5 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 		}
 	}
 
-	return buildTooManyRedirectsResponse();
+	return http.buildTooManyRedirectsResponse();
 }
