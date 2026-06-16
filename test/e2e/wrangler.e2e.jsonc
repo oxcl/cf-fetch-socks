@@ -1,7 +1,0 @@
-{
-  "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "cf-fetch-socks-e2e",
-  "main": "./worker.ts",
-  "compatibility_date": "2026-05-25",
-  "compatibility_flags": ["nodejs_compat"]
-}
