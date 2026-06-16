@@ -1,13 +1,12 @@
-import { AbortError } from '../errors';
-import { debug } from '../debug';
-import { MAX_REDIRECT } from '../constants';
-import type { Proxy } from '../proxy';
-import { http } from '../http';
-import { buildNextRequest } from './redirect';
-import { drainToBuffer, drainReader } from '../utils';
-import { createPlainStream, createChunkedDecodingStream } from '../http/stream';
+import { AbortError } from './errors';
+import { debug } from './debug';
+import { MAX_REDIRECT } from './constants';
+import type { Proxy } from './proxy';
+import { http } from './http';
+import { drainToBuffer, drainReader } from './utils';
+import { createPlainStream, createChunkedDecodingStream } from './http/stream';
 
-export type { PerformResult } from './types';
+export type { PerformResult } from './http/types';
 
 function checkAborted(signal?: AbortSignal): void {
 	if (signal?.aborted) throw new AbortError('The operation was aborted');
@@ -50,10 +49,9 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 				? createPlainStream(conn, result.initialBytes, Number(cl))
 				: createChunkedDecodingStream(conn, result.initialBytes);
 			await drainReader(drainStream.getReader());
-			const location = result.headers.get('Location');
-			if (!location) return http.buildNoLocationResponse(proxy, conn, result);
+			if (!result.headers.get('Location')) return http.buildNoLocationResponse(proxy, conn, result);
 
-			const next = buildNextRequest(request, bodyPayload, result, location, url);
+			const next = http.buildNextRequest(request, bodyPayload, result);
 			request = next.request;
 			bodyPayload = next.bodyBytes;
 			conn.reader!.releaseLock();

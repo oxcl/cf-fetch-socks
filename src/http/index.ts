@@ -18,6 +18,7 @@ import {
 	throwRedirectError,
 	buildNoLocationResponse,
 	buildTooManyRedirectsResponse,
+	buildNextRequest,
 } from './response-builders';
 import { isRedirect } from './utils';
 
@@ -35,5 +36,6 @@ export const http = {
 	throwRedirectError,
 	buildNoLocationResponse,
 	buildTooManyRedirectsResponse,
+	buildNextRequest,
 	isRedirect,
 };

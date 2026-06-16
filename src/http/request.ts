@@ -2,7 +2,7 @@ import { debug } from '../debug';
 import { readHeaders } from './response';
 import { checkProxyError } from '../errors';
 import type { ProxyConnection } from '../connection';
-import type { PerformResult } from '../executor/types';
+import type { PerformResult } from './types';
 
 function serializeBody(body: BodyInit | null | undefined): Uint8Array | undefined {
 	if (body == null) return undefined;

@@ -1,7 +1,7 @@
 import { debug } from '../debug';
 import type { Proxy } from '../proxy';
 import type { ProxyConnection } from '../connection';
-import type { PerformResult } from '../executor/types';
+import type { PerformResult } from './types';
 
 export function buildManualResponse(proxy: Proxy, conn: ProxyConnection, result: PerformResult): Response {
 	conn.reader!.releaseLock();
@@ -29,4 +29,23 @@ export function buildTooManyRedirectsResponse(): never {
 	debug.timeEnd('total');
 	debug.end();
 	throw new TypeError('Too many redirects');
+}
+
+export function buildNextRequest(
+	request: Request,
+	bodyBytes: Uint8Array | undefined,
+	result: PerformResult,
+): { request: Request; bodyBytes: Uint8Array | undefined } {
+	const preserve = result.status === 307 || result.status === 308;
+	const method = preserve ? request.method : 'GET';
+	const nextBody = preserve ? bodyBytes : undefined;
+	const nextUrl = new URL(result.headers.get('Location')!, request.url);
+	const nextHeaders = new Headers(request.headers);
+	if (nextUrl.origin !== new URL(request.url).origin) {
+		nextHeaders.delete('Authorization');
+	}
+	return {
+		request: new Request(nextUrl, { method, headers: nextHeaders, body: nextBody, signal: request.signal }),
+		bodyBytes: nextBody,
+	};
 }
