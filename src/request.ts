@@ -1,9 +1,6 @@
 import { drainToBuffer } from './utils';
 
-export async function buildRequestObject(
-	urlOrString: string | URL | Request,
-	init?: RequestInit,
-): Promise<Request> {
+export async function buildRequestObject(urlOrString: string | URL | Request, init?: RequestInit): Promise<Request> {
 	let requestObj: Request | undefined;
 	let url: URL;
 	if (urlOrString instanceof Request) {

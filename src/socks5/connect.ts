@@ -54,10 +54,14 @@ export async function readConnectReply(
 
 function replyPayloadSize(atyp: number, firstChunk: Uint8Array): number {
 	switch (atyp) {
-		case 1: return 6;
-		case 3: return 1 + firstChunk[4] + 2;
-		case 4: return 18;
-		default: throw new Socks5ProtocolError(`Unknown ATYP ${atyp}`);
+		case 1:
+			return 6;
+		case 3:
+			return 1 + firstChunk[4] + 2;
+		case 4:
+			return 18;
+		default:
+			throw new Socks5ProtocolError(`Unknown ATYP ${atyp}`);
 	}
 }
 

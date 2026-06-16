@@ -3,15 +3,11 @@ import { Socks5ProtocolError, Socks5AuthError } from '../errors';
 const GREETING = new Uint8Array([5, 2, 0, 2]);
 const AUTH_VERSION = 1;
 
-export async function sendGreeting(
-	writer: WritableStreamDefaultWriter<Uint8Array>,
-): Promise<void> {
+export async function sendGreeting(writer: WritableStreamDefaultWriter<Uint8Array>): Promise<void> {
 	await writer.write(GREETING);
 }
 
-export async function receiveGreeting(
-	reader: ReadableStreamDefaultReader<Uint8Array>,
-): Promise<number> {
+export async function receiveGreeting(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<number> {
 	const result = await reader.read();
 	if (result.done) throw new Socks5ProtocolError('Server closed during greeting');
 	const res = result.value;
@@ -27,13 +23,7 @@ export async function authenticate(
 	password: string,
 ): Promise<void> {
 	const enc = new TextEncoder();
-	const req = new Uint8Array([
-		AUTH_VERSION,
-		username.length,
-		...enc.encode(username),
-		password.length,
-		...enc.encode(password),
-	]);
+	const req = new Uint8Array([AUTH_VERSION, username.length, ...enc.encode(username), password.length, ...enc.encode(password)]);
 	await writer.write(req);
 
 	const result = await reader.read();

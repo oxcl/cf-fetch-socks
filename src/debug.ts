@@ -22,9 +22,7 @@ export interface DebugContext {
 	end(): void;
 }
 
-function createDebugger(
-	debugOpt?: boolean | DebugOptions,
-): DebugContext | undefined {
+function createDebugger(debugOpt?: boolean | DebugOptions): DebugContext | undefined {
 	const enable = debugOpt === true || (typeof debugOpt === 'object' && debugOpt.enable);
 	const logFn = typeof debugOpt === 'object' ? debugOpt.logFn : undefined;
 	const onLine = typeof debugOpt === 'object' ? debugOpt.onLine : undefined;
@@ -63,7 +61,9 @@ function createDebugger(
 		dump(bytes: Uint8Array, label: string) {
 			if (bytes.length === 0) return;
 			const view = bytes.length > 64 ? bytes.subarray(0, 64) : bytes;
-			const hex = Array.from(view).map(b => b.toString(16).padStart(2, '0')).join(' ');
+			const hex = Array.from(view)
+				.map((b) => b.toString(16).padStart(2, '0'))
+				.join(' ');
 			const suffix = bytes.length > 64 ? ` ... (${bytes.length} bytes)` : ` (${bytes.length} bytes)`;
 			out(`${label}: ${hex}${suffix}`);
 		},
@@ -89,13 +89,27 @@ class Debug {
 		this._ctx = createDebugger(opt);
 	}
 
-	log(msg: string) { this._ctx?.log(msg); }
-	time(label: string) { this._ctx?.time(label); }
-	timeEnd(label: string) { this._ctx?.timeEnd(label); }
-	dump(bytes: Uint8Array, label: string) { this._ctx?.dump(bytes, label); }
-	getLogFn(): LogFn { return this._ctx?.getLogFn() ?? (() => {}); }
-	getEntries(): DebugEntry[] { return this._ctx?.getEntries() ?? []; }
-	end() { this._ctx?.end(); }
+	log(msg: string) {
+		this._ctx?.log(msg);
+	}
+	time(label: string) {
+		this._ctx?.time(label);
+	}
+	timeEnd(label: string) {
+		this._ctx?.timeEnd(label);
+	}
+	dump(bytes: Uint8Array, label: string) {
+		this._ctx?.dump(bytes, label);
+	}
+	getLogFn(): LogFn {
+		return this._ctx?.getLogFn() ?? (() => {});
+	}
+	getEntries(): DebugEntry[] {
+		return this._ctx?.getEntries() ?? [];
+	}
+	end() {
+		this._ctx?.end();
+	}
 
 	printWaterfall(): void {
 		const entries = this.getEntries();

@@ -14,7 +14,13 @@ function createMockTunnel(): { tunnelFn: TunnelFn; calls: { count: number }; las
 				c.close();
 			},
 		});
-		const socket = { readable, writable, close() { lastSocket.close(); } } as unknown as Socket;
+		const socket = {
+			readable,
+			writable,
+			close() {
+				lastSocket.close();
+			},
+		} as unknown as Socket;
 		return { socket, leftover: new Uint8Array(0) };
 	};
 	return { tunnelFn, calls, lastSocket };

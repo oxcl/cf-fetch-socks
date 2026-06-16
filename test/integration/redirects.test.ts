@@ -68,10 +68,13 @@ describe('redirect: error', () => {
 describe('redirect: Authorization header stripping', () => {
 	it('Authorization header is stripped on cross-origin redirect', async () => {
 		const proxy = makeProxy();
-		const response = await socksFetch(`${HTTPBIN}/redirect-to?url=${encodeURIComponent(`http://172.17.0.1:8080/headers`)}&status_code=302`, {
-			proxy,
-			headers: { Authorization: 'Bearer secret' },
-		});
+		const response = await socksFetch(
+			`${HTTPBIN}/redirect-to?url=${encodeURIComponent(`http://172.17.0.1:8080/headers`)}&status_code=302`,
+			{
+				proxy,
+				headers: { Authorization: 'Bearer secret' },
+			},
+		);
 		expect(response.status).toBe(200);
 		const json = (await response.json()) as { headers: Record<string, string> };
 		expect(json.headers['authorization']).toBeUndefined();

@@ -2,26 +2,20 @@ import type { Socket } from '@cloudflare/workers-types';
 import { debug } from '../debug';
 import type { ConnectFn } from '../socket';
 import type { ProxyTarget, ProxyCredentials, TunnelFn } from '../connection';
-import {
-	ConnectionRefusedError,
-	ConnectionTimeoutError,
-	AbortError,
-	Socks5AuthError,
-} from '../errors';
+import { ConnectionRefusedError, ConnectionTimeoutError, AbortError, Socks5AuthError } from '../errors';
 import { getAddressType } from './address';
 import { sendGreeting, receiveGreeting, authenticate } from './greeting';
 import { sendConnectRequest, readConnectReply } from './connect';
 
-function connectProxySocket(
-	hostname: string,
-	port: number,
-	connectFn: ConnectFn,
-	signal?: AbortSignal,
-): Socket {
+function connectProxySocket(hostname: string, port: number, connectFn: ConnectFn, signal?: AbortSignal): Socket {
 	try {
 		const socket = connectFn({ hostname, port });
 		if (signal?.aborted) {
-			try { socket.close(); } catch { /* ignore */ }
+			try {
+				socket.close();
+			} catch {
+				/* ignore */
+			}
 			throw new AbortError('Request aborted before connection established');
 		}
 		return socket;
@@ -66,7 +60,11 @@ export const socks5Tunnel: TunnelFn = async (target, creds, connectFn, signal) =
 		const addressType = getAddressType(target.host);
 		const connectSignal = signal ?? AbortSignal.timeout(creds.timeout ?? 10_000);
 		const onAbort = () => {
-			try { socket.close(); } catch { /* ignore */ }
+			try {
+				socket.close();
+			} catch {
+				/* ignore */
+			}
 		};
 		connectSignal.addEventListener('abort', onAbort);
 		let leftover: Uint8Array;
@@ -86,9 +84,21 @@ export const socks5Tunnel: TunnelFn = async (target, creds, connectFn, signal) =
 		return { socket, leftover };
 	} finally {
 		if (!socketOwned) {
-			try { socket.close(); } catch { /* ignore */ }
+			try {
+				socket.close();
+			} catch {
+				/* ignore */
+			}
 		}
-		try { writer.releaseLock(); } catch { /* ignore */ }
-		try { reader.releaseLock(); } catch { /* ignore */ }
+		try {
+			writer.releaseLock();
+		} catch {
+			/* ignore */
+		}
+		try {
+			reader.releaseLock();
+		} catch {
+			/* ignore */
+		}
 	}
 };

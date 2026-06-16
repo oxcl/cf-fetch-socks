@@ -1,5 +1,9 @@
 export class TunnelError extends Error {
-	constructor(message: string, public readonly code: string, cause?: unknown) {
+	constructor(
+		message: string,
+		public readonly code: string,
+		cause?: unknown,
+	) {
 		super(message, { cause });
 		this.name = 'TunnelError';
 	}
@@ -24,7 +28,10 @@ export const AbortError = tunnelError('AbortError', 'ABORT');
 export const TlsSessionError = tunnelError('TlsSessionError', 'TLS_SESSION_ERROR');
 
 export class ProxyError extends Error {
-	constructor(message: string, public readonly status: number) {
+	constructor(
+		message: string,
+		public readonly status: number,
+	) {
 		super(message);
 		this.name = 'ProxyError';
 	}
@@ -46,10 +53,14 @@ export const GatewayTimeoutError = proxyError('GatewayTimeoutError', 504, 'Gatew
 
 export function checkProxyError(status: number, bodyText: string): void {
 	switch (status) {
-		case 407: throw new ProxyAuthError();
-		case 403: throw new ProxyForbiddenError();
-		case 502: throw new BadGatewayError();
-		case 504: throw new GatewayTimeoutError();
+		case 407:
+			throw new ProxyAuthError();
+		case 403:
+			throw new ProxyForbiddenError();
+		case 502:
+			throw new BadGatewayError();
+		case 504:
+			throw new GatewayTimeoutError();
 	}
 
 	const lower = bodyText.toLowerCase();

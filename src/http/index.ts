@@ -1,18 +1,6 @@
-import {
-	buildRequest,
-	performRequest,
-} from './request';
-import {
-	parseResponseHeaders,
-	readHeaders,
-	streamResponse,
-	buildFinalResponse,
-} from './response';
-import {
-	createChunkedDecodingStream,
-	createDecompressionStream,
-	createPlainStream,
-} from './stream';
+import { buildRequest, performRequest } from './request';
+import { parseResponseHeaders, readHeaders, streamResponse, buildFinalResponse } from './response';
+import { createChunkedDecodingStream, createDecompressionStream, createPlainStream } from './stream';
 import {
 	buildManualResponse,
 	throwRedirectError,

@@ -9,11 +9,19 @@ import { pumpSocket, makeTlsReadable, type TlsState } from './tls-helpers';
 setCryptoImplementation(webcryptoCrypto);
 
 const tlsLogger = {
-	info(...args: unknown[]) { debug.log(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')); },
-	debug(...args: unknown[]) { debug.log(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')); },
+	info(...args: unknown[]) {
+		debug.log(args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '));
+	},
+	debug(...args: unknown[]) {
+		debug.log(args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '));
+	},
 	trace() {},
-	warn(...args: unknown[]) { debug.log(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')); },
-	error(...args: unknown[]) { debug.log(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')); },
+	warn(...args: unknown[]) {
+		debug.log(args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '));
+	},
+	error(...args: unknown[]) {
+		debug.log(args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '));
+	},
 };
 
 const CIPHERS: NonNullable<Parameters<typeof makeTLSClient>[0]>['cipherSuites'] = [
@@ -93,11 +101,19 @@ export async function wrapTls(
 	debug.dump(leftover, 'tls.leftover');
 	debug.time('tls.handshake');
 
-	const { tls, handshakeDone } = createTlsClient(target, writer, s, () => {
-		closed = true;
-	}, onTicket ? (ticket) => {
-		tls.getPskFromTicket(ticket).then((newPsk) => onTicket(newPsk));
-	} : undefined);
+	const { tls, handshakeDone } = createTlsClient(
+		target,
+		writer,
+		s,
+		() => {
+			closed = true;
+		},
+		onTicket
+			? (ticket) => {
+					tls.getPskFromTicket(ticket).then((newPsk) => onTicket(newPsk));
+				}
+			: undefined,
+	);
 	pumpSocket(socket, tls, leftover);
 	await tls.startHandshake(psk ? { psk } : undefined);
 

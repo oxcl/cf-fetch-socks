@@ -3,9 +3,7 @@ import { concatUint8Arrays, drainReader } from '../utils';
 import { createChunkedDecodingStream, createDecompressionStream, createPlainStream } from './stream';
 import type { ProxyConnection } from '../connection';
 
-export function parseResponseHeaders(
-	data: Uint8Array,
-): { status: number; statusText: string; headers: Headers; bodyStart: number } {
+export function parseResponseHeaders(data: Uint8Array): { status: number; statusText: string; headers: Headers; bodyStart: number } {
 	const text = new TextDecoder().decode(data);
 	const headerEnd = text.indexOf('\r\n\r\n');
 	const lines = text.substring(0, headerEnd).split('\r\n');
@@ -92,16 +90,10 @@ export function streamResponse(
 	}
 
 	if (isChunked) {
-		return new Response(
-			createChunkedDecodingStream(conn, initialBytes, signal),
-			{ status, statusText, headers },
-		);
+		return new Response(createChunkedDecodingStream(conn, initialBytes, signal), { status, statusText, headers });
 	}
 
-	return new Response(
-		createPlainStream(conn, initialBytes, contentLength, signal),
-		{ status, statusText, headers },
-	);
+	return new Response(createPlainStream(conn, initialBytes, contentLength, signal), { status, statusText, headers });
 }
 
 type Result = { status: number; statusText: string; headers: Headers; initialBytes: Uint8Array };
@@ -117,7 +109,9 @@ export function buildFinalResponse(
 		return new Response(null, { status: result.status, statusText: result.statusText, headers: result.headers });
 	}
 
-	debug.log(`Response: ${result.status}, content-length: ${result.headers.get('Content-Length') ?? 'chunked'}, encoding: ${result.headers.get('Content-Encoding') ?? 'none'}`);
+	debug.log(
+		`Response: ${result.status}, content-length: ${result.headers.get('Content-Length') ?? 'chunked'}, encoding: ${result.headers.get('Content-Encoding') ?? 'none'}`,
+	);
 	debug.timeEnd('total');
 	debug.printWaterfall();
 	const ce = result.headers.get('Content-Encoding');
@@ -134,5 +128,3 @@ function decorateResponse(response: Response, redirected: boolean, url?: string)
 	}
 	return response;
 }
-
-
