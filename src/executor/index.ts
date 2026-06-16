@@ -3,8 +3,9 @@ import { debug } from '../debug';
 import { MAX_REDIRECT } from '../constants';
 import type { Proxy } from '../proxy';
 import { http } from '../http';
-import { buildNextRequest, drainConnectionBody } from './redirect';
-import { drainToBuffer } from '../utils';
+import { buildNextRequest } from './redirect';
+import { drainToBuffer, drainReader } from '../utils';
+import { createPlainStream, createChunkedDecodingStream } from '../http/stream';
 
 export type { PerformResult } from './types';
 
@@ -44,7 +45,11 @@ export async function executeRedirectLoop(proxy: Proxy, request: Request, signal
 
 			redirected = true;
 
-			await drainConnectionBody(conn, result);
+			const cl = result.headers.get('Content-Length');
+			const drainStream = cl
+				? createPlainStream(conn, result.initialBytes, Number(cl))
+				: createChunkedDecodingStream(conn, result.initialBytes);
+			await drainReader(drainStream.getReader());
 			const location = result.headers.get('Location');
 			if (!location) return http.buildNoLocationResponse(proxy, conn, result);
 

@@ -1,22 +1,4 @@
-import type { ProxyConnection } from '../connection';
 import type { PerformResult } from './types';
-import { createChunkedDecodingStream } from '../http/stream';
-import { drainReader } from '../utils';
-
-export async function drainConnectionBody(conn: ProxyConnection, result: PerformResult): Promise<void> {
-  const cl = result.headers.get('Content-Length');
-  if (cl) {
-    let drained = result.initialBytes.length;
-    while (drained < Number(cl)) {
-      const { value, done } = await conn.reader!.read();
-      if (done) break;
-      drained += value.length;
-    }
-    return;
-  }
-  const stream = createChunkedDecodingStream(conn, result.initialBytes);
-  await drainReader(stream.getReader());
-}
 
 export function buildNextRequest(request: Request, bodyBytes: Uint8Array | undefined, result: PerformResult, location: string, url: URL): { request: Request; bodyBytes: Uint8Array | undefined } {
   const method = request.method;
