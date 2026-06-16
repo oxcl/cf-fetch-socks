@@ -1,4 +1,4 @@
-import type { ExecutorState, PerformResult } from './types';
+import type { PerformResult } from './types';
 
 export async function drainAndGetLocation(result: PerformResult): Promise<string | null> {
   const cl = result.headers.get('Content-Length');
@@ -13,16 +13,19 @@ export async function drainAndGetLocation(result: PerformResult): Promise<string
   return result.headers.get('Location');
 }
 
-export function buildNextRequest(state: ExecutorState, result: PerformResult, location: string, url: URL): void {
-  const method = state.request.method;
+export function buildNextRequest(request: Request, bodyBytes: Uint8Array | undefined, result: PerformResult, location: string, url: URL): { request: Request; bodyBytes: Uint8Array | undefined } {
+  const method = request.method;
   const nextMethod = result.status !== 307 && result.status !== 308 ? 'GET' : method;
-  const nextBody = result.status !== 307 && result.status !== 308 ? undefined : state.bodyBytes;
-  if (result.status !== 307 && result.status !== 308) state.bodyBytes = undefined;
+  const nextBody = result.status !== 307 && result.status !== 308 ? undefined : bodyBytes;
+  const nextBodyBytes = result.status !== 307 && result.status !== 308 ? undefined : bodyBytes;
 
-  const nextUrl = new URL(location, state.request.url);
-  const nextHeaders = new Headers(state.request.headers);
+  const nextUrl = new URL(location, request.url);
+  const nextHeaders = new Headers(request.headers);
   if (nextUrl.origin !== url.origin) {
     nextHeaders.delete('Authorization');
   }
-  state.request = new Request(nextUrl, { method: nextMethod, headers: nextHeaders, body: nextBody });
+  return {
+    request: new Request(nextUrl, { method: nextMethod, headers: nextHeaders, body: nextBody }),
+    bodyBytes: nextBodyBytes,
+  };
 }

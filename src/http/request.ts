@@ -11,22 +11,11 @@ function serializeBody(body: BodyInit | null | undefined): Uint8Array | undefine
 	return new TextEncoder().encode(String(body));
 }
 
-export function buildRequest(
-	target: URL,
-	method: string,
-	headers?: HeadersInit,
-	body?: BodyInit | null,
-): Uint8Array {
+export function buildRequest(target: URL, method: string, headers?: HeadersInit, body?: BodyInit | null): Uint8Array {
 	const path = target.pathname + target.search;
 	const defaultPort = target.protocol === 'https:' ? 443 : 80;
 	const host = target.port && Number(target.port) !== defaultPort ? target.host : target.hostname;
-	const lines = [
-		`${method} ${path} HTTP/1.1`,
-		`Host: ${host}`,
-		`User-Agent: undici`,
-		`Accept: */*`,
-		`Connection: keep-alive`,
-	];
+	const lines = [`${method} ${path} HTTP/1.1`, `Host: ${host}`, `User-Agent: undici`, `Accept: */*`, `Connection: keep-alive`];
 
 	const extraHeaders = new Headers(headers);
 	const bodyBytes = serializeBody(body);
@@ -78,23 +67,42 @@ export async function performRequest(
 	request: Request,
 	reader?: ReadableStreamDefaultReader<Uint8Array> | null,
 	bodyBytes?: Uint8Array,
+	signal?: AbortSignal,
 ) {
-	const url = new URL(request.url);
-	const reqBytes = buildRequest(url, request.method, request.headers, bodyBytes);
-	debug.dump(reqBytes, 'http.request');
+	if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
 
-	debug.time('http.send');
-	await conn.write(reqBytes);
-	debug.timeEnd('http.send');
+	return new Promise<{ reader: ReadableStreamDefaultReader<Uint8Array>; status: number; statusText: string; headers: Headers; initialBytes: Uint8Array }>((resolve, reject) => {
+		const onAbort = () => {
+			reject(new DOMException('The operation was aborted', 'AbortError'));
+		};
+		signal?.addEventListener('abort', onAbort, { once: true });
 
-	if (!reader) {
-		reader = conn.readable.getReader();
-	}
-	debug.time('http.ttfb');
-	const parsed = await readHeaders(reader);
-	debug.timeEnd('http.ttfb');
+		(async () => {
+			try {
+				const url = new URL(request.url);
+				const reqBytes = buildRequest(url, request.method, request.headers, bodyBytes);
+				debug.dump(reqBytes, 'http.request');
 
-	checkProxyError(parsed.status, new TextDecoder().decode(parsed.initialBytes));
-	debug.log(`<- ${parsed.status} ${parsed.statusText}`);
-	return { reader, ...parsed };
+				debug.time('http.send');
+				await conn.write(reqBytes);
+				debug.timeEnd('http.send');
+
+				if (!reader) {
+					reader = conn.readable.getReader();
+				}
+				debug.time('http.ttfb');
+				const parsed = await readHeaders(reader);
+				debug.timeEnd('http.ttfb');
+
+				checkProxyError(parsed.status, new TextDecoder().decode(parsed.initialBytes));
+				debug.log(`<- ${parsed.status} ${parsed.statusText}`);
+
+				signal?.removeEventListener('abort', onAbort);
+				resolve({ reader, ...parsed });
+			} catch (e) {
+				signal?.removeEventListener('abort', onAbort);
+				reject(e);
+			}
+		})();
+	});
 }

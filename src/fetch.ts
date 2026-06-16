@@ -1,5 +1,5 @@
 import { Proxy } from './proxy';
-import { execute } from './executor';
+import { executeRedirectLoop } from './executor';
 import { buildRequestObject } from './request';
 import { AbortError } from './errors';
 import { debug } from './debug';
@@ -20,7 +20,7 @@ export async function socksFetch(urlOrString: string | URL | Request, options: P
 	const proxy = typeof options.proxy === 'string' ? Proxy.obtainProxy(options.proxy) : options.proxy;
 	const request = await buildRequestObject(urlOrString, options);
 
-  debug.log(`-> ${request.method} ${request.url} via proxy ${proxy.uri.hostname}`);
-  debug.time('total');
-  return await execute(proxy, request, options.signal ?? undefined);
+	debug.log(`-> ${request.method} ${request.url} via proxy ${proxy.uri.hostname}`);
+	debug.time('total');
+	return await executeRedirectLoop(proxy, request, options.signal ?? undefined);
 }
