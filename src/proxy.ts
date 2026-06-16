@@ -1,3 +1,4 @@
+import type { TLSPresharedKey } from '@reclaimprotocol/tls';
 import { debug } from './debug';
 import type { ConnectFn } from './socket';
 import { defaultConnect } from './socket';
@@ -14,6 +15,7 @@ export class Proxy {
 	private pooled: boolean;
 	private pool = new Map<string, ProxyConnection[]>();
 	private busy = new WeakSet<ProxyConnection>();
+	private pskCache = new Map<string, TLSPresharedKey>();
 	private _uri: URL;
 
 	static obtainProxy(uri: string): Proxy {
@@ -59,8 +61,13 @@ export class Proxy {
 	}
 
 	private async acquire(target: ProxyTarget, signal?: AbortSignal): Promise<ProxyConnection> {
-		debug.log(`Opening new connection to ${target.host}:${target.port}`);
-		return openConnection(this.tunnelFn, this.opts, target, this.connectFn, signal);
+		const key = `${target.host}:${target.port}`;
+		const psk = target.tls ? this.pskCache.get(key) : undefined;
+		debug.log(`Opening new connection to ${target.host}:${target.port}${psk ? ' (TLS session resumption)' : ''}`);
+		const conn = await openConnection(this.tunnelFn, this.opts, target, this.connectFn, signal, psk, (newPsk) => {
+			this.pskCache.set(key, newPsk);
+		});
+		return conn;
 	}
 
 	async acquireConnection(target: ProxyTarget, signal?: AbortSignal): Promise<ProxyConnection> {
@@ -94,5 +101,6 @@ export class Proxy {
 			for (const conn of conns) conn.close();
 		}
 		this.pool.clear();
+		this.pskCache.clear();
 	}
 }
