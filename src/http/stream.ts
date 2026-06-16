@@ -8,29 +8,6 @@ export async function drainReader(reader: ReadableStreamDefaultReader<Uint8Array
 	}
 }
 
-export async function pipeReaderToWriter(
-	reader: ReadableStreamDefaultReader<Uint8Array>,
-	writer: WritableStreamDefaultWriter<Uint8Array>,
-	initialBytes: Uint8Array,
-	cleanup: () => void,
-	contentLength?: number,
-): Promise<void> {
-	try {
-		let remaining = contentLength !== undefined ? contentLength - initialBytes.length : -1;
-		if (initialBytes.length > 0) await writer.write(initialBytes);
-		while (true) {
-			if (remaining === 0) break;
-			const { value, done } = await reader.read();
-			if (done) break;
-			await writer.write(value);
-			if (remaining > 0) remaining -= value.length;
-		}
-	} finally {
-		await writer.close();
-		cleanup();
-	}
-}
-
 function indexOfSeq(buffer: Uint8Array, seq: number[], start: number): number {
 	for (let i = start; i <= buffer.length - seq.length; i++) {
 		let match = true;
@@ -53,23 +30,27 @@ export function createChunkedDecodingStream(
 	reader: ReadableStreamDefaultReader<Uint8Array>,
 	initialBytes: Uint8Array,
 	cleanup?: () => void,
+	signal?: AbortSignal,
 ): ReadableStream<Uint8Array> {
-	const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-	const writer = writable.getWriter();
+	const CRLF = [0x0D, 0x0A];
+	const decoder = new TextDecoder();
+	let buffer = initialBytes;
+	let offset = 0;
 
-	(async () => {
-		const CRLF = [0x0D, 0x0A];
-		const decoder = new TextDecoder();
-		let buffer = initialBytes;
-		let offset = 0;
-
-		try {
+	return new ReadableStream({
+		async pull(controller) {
 			while (true) {
+				if (signal?.aborted) {
+					controller.close();
+					cleanup?.();
+					return;
+				}
 				const crlfIdx = indexOfSeq(buffer, CRLF, offset);
 				if (crlfIdx === -1) {
 					const { value, done } = await reader.read();
 					if (done) {
-						await writer.close();
+						controller.close();
+						cleanup?.();
 						return;
 					}
 					buffer = extendBuffer(buffer, value);
@@ -81,30 +62,31 @@ export function createChunkedDecodingStream(
 
 				const payloadStart = crlfIdx + 2;
 				if (chunkSize === 0) {
-					await writer.close();
+					controller.close();
+					cleanup?.();
 					return;
 				}
 				const chunkEnd = payloadStart + chunkSize;
 				if (chunkEnd + 2 > buffer.length) {
 					const { value, done } = await reader.read();
 					if (done) {
-						await writer.close();
+						controller.close();
+						cleanup?.();
 						return;
 					}
 					buffer = extendBuffer(buffer, value);
 					continue;
 				}
-				await writer.write(buffer.slice(payloadStart, chunkEnd));
+				controller.enqueue(buffer.slice(payloadStart, chunkEnd));
 				offset = chunkEnd + 2;
+				return;
 			}
-		} catch (e) {
-			try { await writer.abort(e); } catch { /* ignore */ }
-		} finally {
+		},
+		cancel() {
 			cleanup?.();
-		}
-	})();
-
-	return readable;
+			reader.cancel().catch(() => {});
+		},
+	}, { highWaterMark: 0 });
 }
 
 function createDecompressor(encoding: string): zlib.BrotliCompress | zlib.Gunzip | zlib.Inflate | zlib.InflateRaw {
@@ -122,6 +104,7 @@ export function createDecompressionStream(
 	contentLength: number | undefined,
 	encoding: string,
 	cleanup?: () => void,
+	signal?: AbortSignal,
 ): ReadableStream<Uint8Array> {
 	const decompressor = createDecompressor(encoding);
 	let remaining = contentLength !== undefined ? contentLength - initialBytes.length : -1;
@@ -131,6 +114,13 @@ export function createDecompressionStream(
 			decompressor.on('data', (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)));
 			decompressor.on('end', () => { controller.close(); cleanup?.(); });
 			decompressor.on('error', (err) => { controller.error(err); cleanup?.(); });
+
+			if (signal) {
+				signal.addEventListener('abort', () => {
+					decompressor.destroy();
+					reader.cancel().catch(() => {});
+				}, { once: true });
+			}
 
 			if (initialBytes.length > 0) decompressor.write(initialBytes);
 
@@ -145,6 +135,56 @@ export function createDecompressionStream(
 		cancel() {
 			decompressor.destroy();
 			cleanup?.();
+		},
+	});
+}
+
+export function createPlainStream(
+	reader: ReadableStreamDefaultReader<Uint8Array>,
+	initialBytes: Uint8Array,
+	contentLength: number | undefined,
+	cleanup: () => void,
+	signal?: AbortSignal,
+): ReadableStream<Uint8Array> {
+	let remaining = contentLength !== undefined ? contentLength - initialBytes.length : -1;
+	let initialSent = false;
+
+	return new ReadableStream({
+		async pull(controller) {
+			if (signal?.aborted) {
+				controller.close();
+				cleanup();
+				return;
+			}
+			if (!initialSent) {
+				initialSent = true;
+				if (initialBytes.length > 0) {
+					controller.enqueue(initialBytes);
+					return;
+				}
+			}
+			if (remaining === 0) {
+				controller.close();
+				cleanup();
+				return;
+			}
+			const { value, done } = await reader.read();
+			if (signal?.aborted) {
+				controller.close();
+				cleanup();
+				return;
+			}
+			if (done) {
+				controller.close();
+				cleanup();
+				return;
+			}
+			controller.enqueue(value);
+			if (remaining > 0) remaining -= value.length;
+		},
+		cancel() {
+			cleanup();
+			reader.cancel().catch(() => {});
 		},
 	});
 }

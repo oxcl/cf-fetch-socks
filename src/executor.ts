@@ -57,7 +57,7 @@ export class Executor {
 				const result = await this.perform(conn);
 
 				if (this.request.method === 'HEAD') return this.headResponse(conn, result);
-				if (!this.isRedirect(result.status)) return buildFinalResponse(conn, result, this.redirected, this.request.url);
+				if (!this.isRedirect(result.status)) return buildFinalResponse(conn, result, this.redirected, this.request.url, this.signal);
 				if (this.redirectMode === 'manual') return this.manualResponse(conn, result);
 				if (this.redirectMode === 'error') this.throwRedirectError(conn, result);
 
