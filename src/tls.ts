@@ -1,6 +1,5 @@
 import type { Socket } from '@cloudflare/workers-types';
 import { makeTLSClient, setCryptoImplementation } from '@reclaimprotocol/tls';
-import type { TLSPresharedKey, TLSSessionTicket } from '@reclaimprotocol/tls';
 import { webcryptoCrypto } from '@reclaimprotocol/tls/webcrypto';
 import { debug } from './debug';
 import type { ProxyTarget, ProxyConnection } from './connection';
@@ -37,7 +36,6 @@ function createTlsClient(
 	writer: WritableStreamDefaultWriter<Uint8Array>,
 	s: TlsState,
 	onTlsEnd: (error?: unknown) => void,
-	onSessionTicket?: (ticket: TLSSessionTicket) => void,
 ): { tls: ReturnType<typeof makeTLSClient>; handshakeDone: Promise<void> } {
 	const handshakeDone = new Promise<void>((resolve, reject) => {
 		s.resolveHandshake = resolve;
@@ -81,7 +79,6 @@ function createTlsClient(
 			}
 			onTlsEnd(error);
 		},
-		onSessionTicket,
 	});
 
 	return { tls, handshakeDone };
@@ -91,8 +88,6 @@ export async function wrapTls(
 	leftover: Uint8Array,
 	target: ProxyTarget,
 	signal?: AbortSignal,
-	psk?: TLSPresharedKey,
-	onTicket?: (psk: TLSPresharedKey) => void,
 ): Promise<ProxyConnection> {
 	let closed = false;
 	const writer = socket.writable.getWriter();
@@ -101,21 +96,11 @@ export async function wrapTls(
 	debug.dump(leftover, 'tls.leftover');
 	debug.time('tls.handshake');
 
-	const { tls, handshakeDone } = createTlsClient(
-		target,
-		writer,
-		s,
-		() => {
-			closed = true;
-		},
-		onTicket
-			? (ticket) => {
-					tls.getPskFromTicket(ticket).then((newPsk) => onTicket(newPsk));
-				}
-			: undefined,
-	);
+	const { tls, handshakeDone } = createTlsClient(target, writer, s, () => {
+		closed = true;
+	});
 	pumpSocket(socket, tls, leftover);
-	await tls.startHandshake(psk ? { psk } : undefined);
+	await tls.startHandshake();
 
 	const close = () => {
 		if (closed) return;

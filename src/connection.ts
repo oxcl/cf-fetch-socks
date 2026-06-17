@@ -1,5 +1,4 @@
 import type { Socket } from '@cloudflare/workers-types';
-import type { TLSPresharedKey } from '@reclaimprotocol/tls';
 import { debug } from './debug';
 import type { ConnectFn } from './socket';
 import { wrapTls } from './tls';
@@ -40,8 +39,6 @@ export async function openConnection(
 	target: ProxyTarget,
 	connectFn: ConnectFn,
 	signal?: AbortSignal,
-	psk?: TLSPresharedKey,
-	onTicket?: (psk: TLSPresharedKey) => void,
 ): Promise<ProxyConnection> {
 	debug.time('tunnel');
 	const { socket, leftover } = await tunnelFn(target, creds, connectFn, signal);
@@ -51,7 +48,7 @@ export async function openConnection(
 		return wrapRaw(socket, target);
 	}
 
-	return wrapTls(socket, leftover, target, signal, psk, onTicket);
+	return wrapTls(socket, leftover, target, signal);
 }
 
 function wrapRaw(socket: Socket, target: ProxyTarget): ProxyConnection {
